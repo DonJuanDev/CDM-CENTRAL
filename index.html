@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CDM Central</title>
+  <script type="module">
+    import { getSession } from './js/auth.js';
+    const session = await getSession();
+    window.location.replace(session ? 'app.html' : 'login.html');
+  </script>
+</head>
+<body></body>
+</html>

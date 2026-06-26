@@ -1,0 +1,363 @@
+{
+  "config": {
+    "agencyName": "CDM Central",
+    "metaMensal": 150000,
+    "moeda": "BRL"
+  },
+  "dashboard": {
+    "receitaMes": 127450,
+    "lucroMes": 48200,
+    "boletosPendentes": 8,
+    "clientesAtivos": 34,
+    "clientesRisco": 3,
+    "projetosAndamento": 12,
+    "campanhasAtivas": 28,
+    "leadsGerados": 847,
+    "roasMedio": 4.2,
+    "roiMedio": 312,
+    "investimentoAnuncios": 38500,
+    "metaMensal": 150000,
+    "percentualMeta": 85
+  },
+  "alertas": [
+    { "id": 1, "tipo": "danger", "titulo": "Boleto vencido", "descricao": "Tech Solutions - R$ 4.500,00 venceu há 2 dias", "data": "2026-06-14" },
+    { "id": 2, "tipo": "warning", "titulo": "ROAS abaixo da meta", "descricao": "Campanha Black Friday - ROAS 1.8 (meta: 3.0)", "data": "2026-06-16" },
+    { "id": 3, "tipo": "warning", "titulo": "Cliente sem atendimento", "descricao": "Moda Express - 15 dias sem contato", "data": "2026-06-15" },
+    { "id": 4, "tipo": "info", "titulo": "Reunião em 1 hora", "descricao": "Apresentação de resultados - Grupo Alpha", "data": "2026-06-16" },
+    { "id": 5, "tipo": "danger", "titulo": "Prazo próximo", "descricao": "Edição de vídeo institucional - entrega amanhã", "data": "2026-06-16" }
+  ],
+  "reunioes": [
+    { "id": 1, "titulo": "Apresentação Q2 - Grupo Alpha", "hora": "15:00", "cliente": "Grupo Alpha", "tipo": "online" },
+    { "id": 2, "titulo": "Briefing campanha verão", "hora": "17:30", "cliente": "Moda Express", "tipo": "presencial" },
+    { "id": 3, "titulo": "Review criativos Meta Ads", "hora": "10:00", "cliente": "Tech Solutions", "tipo": "online" }
+  ],
+  "tarefasRecentes": [
+    { "id": 1, "titulo": "Finalizar relatório mensal", "status": "em_progresso", "prioridade": "alta", "responsavel": "Ana Silva", "prazo": "2026-06-17" },
+    { "id": 2, "titulo": "Aprovar criativos campanha", "status": "pendente", "prioridade": "media", "responsavel": "Carlos Mendes", "prazo": "2026-06-18" },
+    { "id": 3, "titulo": "Configurar pixel TikTok", "status": "concluida", "prioridade": "baixa", "responsavel": "Julia Costa", "prazo": "2026-06-15" },
+    { "id": 4, "titulo": "Gravação reels cliente", "status": "em_progresso", "prioridade": "alta", "responsavel": "Pedro Lima", "prazo": "2026-06-16" }
+  ],
+  "metricas": {
+    "integracoes": [
+      "Google Analytics 4", "Google Ads", "Meta Ads", "Instagram", "Facebook",
+      "TikTok Ads", "TikTok Analytics", "LinkedIn Ads", "YouTube",
+      "Google Search Console", "Google Business Profile", "WhatsApp Business",
+      "RD Station", "Hubspot", "Pipedrive", "Hotjar", "Clarity", "Looker Studio"
+    ],
+    "periodos": ["hoje", "ontem", "7d", "30d", "90d", "1a"],
+    "dados": {
+      "30d": {
+        "impressoes": 2450000, "alcance": 890000, "cliques": 124500,
+        "ctr": 5.08, "cpm": 12.40, "cpc": 2.44, "cpa": 45.30,
+        "leads": 847, "conversoes": 312, "roas": 4.2, "roi": 312,
+        "faturamento": 127450, "custo": 38500, "lucro": 48200,
+        "engajamento": 4.8, "seguidores": 12500, "visualizacoes": 890000,
+        "tempoSessao": "3:42", "taxaRejeicao": 32.5, "taxaConversao": 2.8
+      }
+    },
+    "historico": {
+      "labels": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
+      "receita": [98000, 105000, 112000, 118000, 122000, 127450],
+      "investimento": [28000, 30000, 32000, 35000, 37000, 38500],
+      "leads": [620, 680, 720, 780, 810, 847],
+      "roas": [3.5, 3.7, 3.9, 4.0, 4.1, 4.2]
+    }
+  },
+  "financeiro": {
+    "receitas": [
+      { "id": 1, "descricao": "Mensalidade Tech Solutions", "valor": 8500, "data": "2026-06-05", "categoria": "Mensalidade", "cliente": "Tech Solutions" },
+      { "id": 2, "descricao": "Projeto landing page", "valor": 12000, "data": "2026-06-10", "categoria": "Projeto", "cliente": "Grupo Alpha" },
+      { "id": 3, "descricao": "Mensalidade Moda Express", "valor": 6500, "data": "2026-06-01", "categoria": "Mensalidade", "cliente": "Moda Express" },
+      { "id": 4, "descricao": "Gestão tráfego pago", "valor": 4500, "data": "2026-06-12", "categoria": "Serviço", "cliente": "FitLife Gym" }
+    ],
+    "despesas": [
+      { "id": 1, "descricao": "Salários equipe", "valor": 45000, "data": "2026-06-05", "categoria": "Pessoal", "centroCusto": "Operacional" },
+      { "id": 2, "descricao": "Ferramentas SaaS", "valor": 3200, "data": "2026-06-01", "categoria": "Software", "centroCusto": "Tecnologia" },
+      { "id": 3, "descricao": "Investimento ads clientes", "valor": 38500, "data": "2026-06-15", "categoria": "Mídia", "centroCusto": "Campanhas" },
+      { "id": 4, "descricao": "Aluguel escritório", "valor": 8500, "data": "2026-06-10", "categoria": "Infraestrutura", "centroCusto": "Operacional" }
+    ],
+    "mensalidades": [
+      { "cliente": "Tech Solutions", "valor": 8500, "vencimento": "2026-06-05", "status": "pago" },
+      { "cliente": "Moda Express", "valor": 6500, "vencimento": "2026-06-01", "status": "pago" },
+      { "cliente": "Grupo Alpha", "valor": 12000, "vencimento": "2026-06-15", "status": "pendente" },
+      { "cliente": "FitLife Gym", "valor": 4500, "vencimento": "2026-06-20", "status": "pendente" }
+    ],
+    "comissoes": [
+      { "colaborador": "Ana Silva", "valor": 2500, "tipo": "Vendas", "status": "pago" },
+      { "colaborador": "Carlos Mendes", "valor": 1800, "tipo": "Gestão", "status": "pendente" }
+    ],
+    "proLabore": [
+      { "socio": "Diretor Geral", "valor": 15000, "data": "2026-06-05", "status": "pago" },
+      { "socio": "Diretor Comercial", "valor": 12000, "data": "2026-06-05", "status": "pago" }
+    ],
+    "fluxoCaixa": {
+      "labels": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
+      "entrada": [98000, 105000, 112000, 118000, 122000, 127450],
+      "saida": [72000, 75000, 78000, 82000, 85000, 79250]
+    },
+    "dre": {
+      "receitaBruta": 127450,
+      "deducoes": 8500,
+      "receitaLiquida": 118950,
+      "custosVariaveis": 38500,
+      "margemContribuicao": 80450,
+      "custosFixos": 56700,
+      "lucroOperacional": 23750,
+      "lucroLiquido": 48200
+    }
+  },
+  "boletos": [
+    { "id": 1, "cliente": "Tech Solutions", "valor": 8500, "vencimento": "2026-06-05", "status": "pago", "codigo": "34191.79001 01043.510047 91020.150008 1 9876000085000" },
+    { "id": 2, "cliente": "Grupo Alpha", "valor": 12000, "vencimento": "2026-06-15", "status": "pendente", "codigo": "34191.79001 01043.510047 91020.150008 2 9876000012000" },
+    { "id": 3, "cliente": "Moda Express", "valor": 6500, "vencimento": "2026-06-01", "status": "atrasado", "codigo": "34191.79001 01043.510047 91020.150008 3 9876000065000" },
+    { "id": 4, "cliente": "FitLife Gym", "valor": 4500, "vencimento": "2026-06-20", "status": "pendente", "codigo": "34191.79001 01043.510047 91020.150008 4 9876000045000" },
+    { "id": 5, "cliente": "Restaurante Sabor", "valor": 3800, "vencimento": "2026-07-01", "status": "futuro", "codigo": "34191.79001 01043.510047 91020.150008 5 9876000038000" },
+    { "id": 6, "cliente": "Clínica Vida", "valor": 7200, "vencimento": "2026-05-28", "status": "cancelado", "codigo": "34191.79001 01043.510047 91020.150008 6 9876000072000" }
+  ],
+  "clientes": [
+    {
+      "id": 1, "empresa": "Tech Solutions", "responsavel": "Roberto Almeida",
+      "telefone": "(11) 98765-4321", "email": "roberto@techsolutions.com.br",
+      "instagram": "@techsolutions", "facebook": "TechSolutionsBR", "website": "techsolutions.com.br",
+      "contrato": "Anual", "mensalidade": 8500, "status": "ativo",
+      "observacoes": "Cliente premium, foco em B2B SaaS",
+      "historico": [
+        { "data": "2026-06-10", "acao": "Reunião de alinhamento Q2", "usuario": "Ana Silva" },
+        { "data": "2026-06-05", "acao": "Pagamento mensalidade", "usuario": "Sistema" }
+      ],
+      "anexos": ["contrato_2026.pdf", "briefing_inicial.pdf"]
+    },
+    {
+      "id": 2, "empresa": "Moda Express", "responsavel": "Fernanda Costa",
+      "telefone": "(21) 99876-5432", "email": "fernanda@modaexpress.com",
+      "instagram": "@modaexpress", "facebook": "ModaExpressOficial", "website": "modaexpress.com.br",
+      "contrato": "Semestral", "mensalidade": 6500, "status": "risco",
+      "observacoes": "15 dias sem contato, revisar estratégia",
+      "historico": [
+        { "data": "2026-06-01", "acao": "Pagamento mensalidade", "usuario": "Sistema" },
+        { "data": "2026-05-20", "acao": "Último contato comercial", "usuario": "Carlos Mendes" }
+      ],
+      "anexos": ["contrato_semestral.pdf"]
+    },
+    {
+      "id": 3, "empresa": "Grupo Alpha", "responsavel": "Marcos Oliveira",
+      "telefone": "(31) 97654-3210", "email": "marcos@grupoalpha.com.br",
+      "instagram": "@grupoalpha", "facebook": "GrupoAlpha", "website": "grupoalpha.com.br",
+      "contrato": "Anual", "mensalidade": 12000, "status": "ativo",
+      "observacoes": "Maior cliente da carteira, múltiplos projetos",
+      "historico": [
+        { "data": "2026-06-14", "acao": "Aprovação de criativos", "usuario": "Julia Costa" }
+      ],
+      "anexos": ["contrato_anual.pdf", "briefing_campanha_verao.pdf", "brandbook.pdf"]
+    },
+    {
+      "id": 4, "empresa": "FitLife Gym", "responsavel": "Lucas Ferreira",
+      "telefone": "(41) 96543-2109", "email": "lucas@fitlifegym.com",
+      "instagram": "@fitlifegym", "facebook": "FitLifeGym", "website": "fitlifegym.com.br",
+      "contrato": "Mensal", "mensalidade": 4500, "status": "ativo",
+      "observacoes": "Foco em tráfego pago e conteúdo fitness",
+      "historico": [], "anexos": ["contrato_mensal.pdf"]
+    }
+  ],
+  "calendario": [
+    {
+      "id": 1, "titulo": "Apresentação Q2 - Grupo Alpha", "data": "2026-06-16", "horaInicio": "15:00", "horaFim": "16:30",
+      "descricao": "Apresentação de resultados do segundo trimestre",
+      "status": "confirmado", "prioridade": "alta", "tags": ["reunião", "resultados"],
+      "clientes": ["Grupo Alpha"], "responsaveis": ["Ana Silva", "Carlos Mendes"],
+      "checklist": [{ "texto": "Preparar slides", "concluido": true }, { "texto": "Enviar convite", "concluido": true }],
+      "comentarios": [{ "autor": "Ana Silva", "texto": "Slides prontos", "data": "2026-06-15" }]
+    },
+    {
+      "id": 2, "titulo": "Gravação Reels - FitLife", "data": "2026-06-17", "horaInicio": "09:00", "horaFim": "12:00",
+      "descricao": "Gravação de 5 reels para campanha de verão",
+      "status": "planejado", "prioridade": "media", "tags": ["produção", "reels"],
+      "clientes": ["FitLife Gym"], "responsaveis": ["Pedro Lima"],
+      "checklist": [{ "texto": "Roteiro aprovado", "concluido": true }, { "texto": "Equipamento reservado", "concluido": false }],
+      "comentarios": []
+    },
+    {
+      "id": 3, "titulo": "Deadline - Landing Page Alpha", "data": "2026-06-20", "horaInicio": "18:00", "horaFim": "18:00",
+      "descricao": "Entrega final da landing page de conversão",
+      "status": "em_andamento", "prioridade": "alta", "tags": ["design", "deadline"],
+      "clientes": ["Grupo Alpha"], "responsaveis": ["Julia Costa"],
+      "checklist": [], "comentarios": []
+    }
+  ],
+  "tarefas": [
+    {
+      "id": 1, "titulo": "Finalizar relatório mensal", "descricao": "Compilar dados de todas as campanhas",
+      "status": "em_progresso", "prioridade": "alta", "coluna": "em_progresso",
+      "responsavel": "Ana Silva", "prazo": "2026-06-17", "cliente": "Interno",
+      "subtarefas": [{ "titulo": "Coletar dados GA4", "concluida": true }, { "titulo": "Gerar gráficos", "concluida": false }],
+      "dependencias": [], "comentarios": 2, "anexos": 1
+    },
+    {
+      "id": 2, "titulo": "Aprovar criativos Meta Ads", "descricao": "Review de 12 criativos para campanha",
+      "status": "pendente", "prioridade": "media", "coluna": "a_fazer",
+      "responsavel": "Carlos Mendes", "prazo": "2026-06-18", "cliente": "Tech Solutions",
+      "subtarefas": [], "dependencias": [1], "comentarios": 0, "anexos": 3
+    },
+    {
+      "id": 3, "titulo": "Configurar pixel TikTok", "descricao": "Instalação e teste do pixel",
+      "status": "concluida", "prioridade": "baixa", "coluna": "concluido",
+      "responsavel": "Julia Costa", "prazo": "2026-06-15", "cliente": "Moda Express",
+      "subtarefas": [], "dependencias": [], "comentarios": 1, "anexos": 0
+    },
+    {
+      "id": 4, "titulo": "Gravação reels cliente", "descricao": "5 reels para campanha verão",
+      "status": "em_progresso", "prioridade": "alta", "coluna": "em_progresso",
+      "responsavel": "Pedro Lima", "prazo": "2026-06-16", "cliente": "FitLife Gym",
+      "subtarefas": [{ "titulo": "Roteiro", "concluida": true }, { "titulo": "Gravação", "concluida": false }],
+      "dependencias": [], "comentarios": 3, "anexos": 2
+    },
+    {
+      "id": 5, "titulo": "Design carrossel Instagram", "descricao": "Carrossel educativo 10 slides",
+      "status": "pendente", "prioridade": "media", "coluna": "a_fazer",
+      "responsavel": "Julia Costa", "prazo": "2026-06-19", "cliente": "Grupo Alpha",
+      "subtarefas": [], "dependencias": [], "comentarios": 0, "anexos": 0
+    }
+  ],
+  "producao": [
+    {
+      "id": 1, "titulo": "Reels Campanha Verão", "tipo": "reels", "cliente": "FitLife Gym",
+      "status": "em_edicao", "briefing": "5 reels mostrando treinos de verão",
+      "roteiro": "Roteiro aprovado v2", "versoes": 2, "aprovacao": "pendente",
+      "responsavel": "Pedro Lima", "prazo": "2026-06-18"
+    },
+    {
+      "id": 2, "titulo": "Vídeo Institucional", "tipo": "institucional", "cliente": "Tech Solutions",
+      "status": "gravacao", "briefing": "Vídeo de 3 min apresentando a empresa",
+      "roteiro": "Roteiro final", "versoes": 0, "aprovacao": "nao_iniciada",
+      "responsavel": "Pedro Lima", "prazo": "2026-06-25"
+    },
+    {
+      "id": 3, "titulo": "Stories Promoção", "tipo": "stories", "cliente": "Moda Express",
+      "status": "aprovado", "briefing": "Stories para liquidação de verão",
+      "roteiro": "N/A", "versoes": 3, "aprovacao": "aprovado",
+      "responsavel": "Pedro Lima", "prazo": "2026-06-14"
+    },
+    {
+      "id": 4, "titulo": "Anúncio Meta Ads", "tipo": "anuncio", "cliente": "Grupo Alpha",
+      "status": "revisao", "briefing": "Vídeo 15s para campanha de conversão",
+      "roteiro": "Script v1", "versoes": 1, "aprovacao": "pendente",
+      "responsavel": "Pedro Lima", "prazo": "2026-06-20"
+    }
+  ],
+  "design": [
+    {
+      "id": 1, "titulo": "Carrossel Educativo", "tipo": "carrossel", "cliente": "Grupo Alpha",
+      "status": "em_andamento", "versoes": 2, "canva": true, "responsavel": "Julia Costa"
+    },
+    {
+      "id": 2, "titulo": "Banner Black Friday", "tipo": "banner", "cliente": "Moda Express",
+      "status": "aprovado", "versoes": 4, "canva": true, "responsavel": "Julia Costa"
+    },
+    {
+      "id": 3, "titulo": "Landing Page Alpha", "tipo": "landing", "cliente": "Grupo Alpha",
+      "status": "em_andamento", "versoes": 5, "canva": false, "responsavel": "Julia Costa"
+    },
+    {
+      "id": 4, "titulo": "Posts Feed Instagram", "tipo": "post", "cliente": "FitLife Gym",
+      "status": "revisao", "versoes": 3, "canva": true, "responsavel": "Julia Costa"
+    }
+  ],
+  "arquivos": [
+    {
+      "id": 1, "nome": "Contratos", "tipo": "pasta", "cliente": "Geral",
+      "filhos": [
+        { "id": 11, "nome": "contrato_tech_2026.pdf", "tipo": "pdf", "tamanho": "2.4 MB", "data": "2026-01-15" },
+        { "id": 12, "nome": "contrato_alpha_2026.pdf", "tipo": "pdf", "tamanho": "3.1 MB", "data": "2026-02-01" }
+      ]
+    },
+    {
+      "id": 2, "nome": "Tech Solutions", "tipo": "pasta", "cliente": "Tech Solutions",
+      "filhos": [
+        { "id": 21, "nome": "briefing_inicial.pdf", "tipo": "pdf", "tamanho": "1.8 MB", "data": "2026-01-20" },
+        { "id": 22, "nome": "logo_pack.zip", "tipo": "zip", "tamanho": "15.2 MB", "data": "2026-01-25" },
+        { "id": 23, "nome": "video_institucional_v1.mp4", "tipo": "video", "tamanho": "245 MB", "data": "2026-06-10" }
+      ]
+    },
+    {
+      "id": 3, "nome": "Grupo Alpha", "tipo": "pasta", "cliente": "Grupo Alpha",
+      "filhos": [
+        { "id": 31, "nome": "brandbook.pdf", "tipo": "pdf", "tamanho": "8.5 MB", "data": "2026-02-05" },
+        { "id": 32, "nome": "criativos_junho", "tipo": "pasta", "filhos": [
+          { "id": 321, "nome": "banner_01.png", "tipo": "imagem", "tamanho": "1.2 MB", "data": "2026-06-01" }
+        ]}
+      ]
+    }
+  ],
+  "notas": [
+    { "id": 1, "titulo": "Estratégia Q3 2026", "conteudo": "Focar em expansão de clientes B2B e aumentar ticket médio em 20%.", "tags": ["estratégia", "planejamento"], "data": "2026-06-10", "autor": "Diretor Geral" },
+    { "id": 2, "titulo": "Ideias campanha verão", "conteudo": "Trending: UGC, behind the scenes, challenges virais no TikTok.", "tags": ["campanha", "verão"], "data": "2026-06-12", "autor": "Ana Silva" },
+    { "id": 3, "titulo": "Feedback cliente Alpha", "conteudo": "Cliente satisfeito com ROAS 4.5. Quer expandir budget em 30%.", "tags": ["cliente", "feedback"], "data": "2026-06-14", "autor": "Carlos Mendes" }
+  ],
+  "comercial": {
+    "funil": [
+      { "id": 1, "nome": "Startup InovaTech", "contato": "Paulo Santos", "email": "paulo@inovatech.com", "valor": 5500, "etapa": "lead", "origem": "Indicação", "data": "2026-06-14" },
+      { "id": 2, "nome": "Restaurante Sabor", "contato": "Maria Oliveira", "email": "maria@sabor.com.br", "valor": 3800, "etapa": "contato", "origem": "Instagram", "data": "2026-06-12" },
+      { "id": 3, "nome": "Clínica Vida", "contato": "Dr. Henrique", "email": "henrique@clinicavida.com", "valor": 7200, "etapa": "reuniao", "origem": "Google Ads", "data": "2026-06-10" },
+      { "id": 4, "nome": "E-commerce Luxo", "contato": "Camila Rocha", "email": "camila@luxo.com.br", "valor": 9500, "etapa": "proposta", "origem": "LinkedIn", "data": "2026-06-08" },
+      { "id": 5, "nome": "Academia Power", "contato": "Ricardo Nunes", "email": "ricardo@power.com.br", "valor": 4200, "etapa": "negociacao", "origem": "Site", "data": "2026-06-05" },
+      { "id": 6, "nome": "Pet Shop Amigo", "contato": "Juliana Lima", "email": "juliana@petamigo.com", "valor": 2800, "etapa": "fechado", "origem": "WhatsApp", "data": "2026-06-01" },
+      { "id": 7, "nome": "Construtora Nova", "contato": "Eng. Silva", "email": "silva@nova.com.br", "valor": 15000, "etapa": "perdido", "origem": "Feira", "data": "2026-05-28" }
+    ],
+    "etapas": ["lead", "contato", "reuniao", "proposta", "negociacao", "fechado", "perdido"]
+  },
+  "trafegoPago": {
+    "campanhas": [
+      { "id": 1, "nome": "Conversão SaaS B2B", "cliente": "Tech Solutions", "plataforma": "Google Ads", "status": "ativa", "budget": 5000, "gasto": 3200, "roas": 4.8, "leads": 45, "cpa": 71 },
+      { "id": 2, "nome": "Black Friday Preview", "cliente": "Moda Express", "plataforma": "Meta Ads", "status": "ativa", "budget": 3000, "gasto": 2800, "roas": 1.8, "leads": 120, "cpa": 23 },
+      { "id": 3, "nome": "Brand Awareness Q2", "cliente": "Grupo Alpha", "plataforma": "Meta Ads", "status": "ativa", "budget": 8000, "gasto": 5500, "roas": 5.2, "leads": 89, "cpa": 62 },
+      { "id": 4, "nome": "TikTok Viral Challenge", "cliente": "FitLife Gym", "plataforma": "TikTok Ads", "status": "ativa", "budget": 2000, "gasto": 1200, "roas": 3.5, "leads": 67, "cpa": 18 }
+    ]
+  },
+  "redesSociais": {
+    "contas": [
+      { "cliente": "Tech Solutions", "instagram": { "seguidores": 12500, "engajamento": 4.2, "posts": 156 }, "facebook": { "seguidores": 8900, "engajamento": 2.8 }, "tiktok": { "seguidores": 3200, "engajamento": 8.5 } },
+      { "cliente": "Moda Express", "instagram": { "seguidores": 45000, "engajamento": 5.1, "posts": 890 }, "facebook": { "seguidores": 22000, "engajamento": 3.2 }, "tiktok": { "seguidores": 78000, "engajamento": 12.3 } },
+      { "cliente": "Grupo Alpha", "instagram": { "seguidores": 8900, "engajamento": 3.8, "posts": 234 }, "facebook": { "seguidores": 5600, "engajamento": 2.1 }, "linkedin": { "seguidores": 3400, "engajamento": 4.5 } }
+    ]
+  },
+  "relatorios": [
+    { "id": 1, "titulo": "Relatório Mensal - Junho 2026", "tipo": "mensal", "cliente": "Geral", "data": "2026-06-15", "formato": "pdf", "status": "gerado" },
+    { "id": 2, "titulo": "Performance Meta Ads - Q2", "tipo": "campanha", "cliente": "Grupo Alpha", "data": "2026-06-10", "formato": "pptx", "status": "gerado" },
+    { "id": 3, "titulo": "DRE Simplificada - Maio", "tipo": "financeiro", "cliente": "Interno", "data": "2026-06-01", "formato": "xlsx", "status": "gerado" }
+  ],
+  "executivo": {
+    "receitaTotal": 892000,
+    "mrr": 127450,
+    "lucroLiquido": 48200,
+    "clientesAtivos": 34,
+    "churn": 2.8,
+    "ltv": 45600,
+    "cac": 1200,
+    "roiGeral": 312,
+    "rankingClientes": [
+      { "nome": "Grupo Alpha", "receita": 12000, "roas": 5.2 },
+      { "nome": "Tech Solutions", "receita": 8500, "roas": 4.8 },
+      { "nome": "Moda Express", "receita": 6500, "roas": 1.8 },
+      { "nome": "FitLife Gym", "receita": 4500, "roas": 3.5 }
+    ],
+    "rankingCampanhas": [
+      { "nome": "Brand Awareness Q2", "roas": 5.2, "leads": 89 },
+      { "nome": "Conversão SaaS B2B", "roas": 4.8, "leads": 45 },
+      { "nome": "TikTok Viral Challenge", "roas": 3.5, "leads": 67 }
+    ],
+    "rankingColaboradores": [
+      { "nome": "Ana Silva", "tarefas": 28, "satisfacao": 98 },
+      { "nome": "Carlos Mendes", "tarefas": 24, "satisfacao": 95 },
+      { "nome": "Julia Costa", "tarefas": 22, "satisfacao": 97 },
+      { "nome": "Pedro Lima", "tarefas": 18, "satisfacao": 94 }
+    ]
+  },
+  "usuarios": [
+    { "id": 1, "nome": "Admin CDM", "email": "admin@cdmcentral.com", "role": "admin", "avatar": "A" },
+    { "id": 2, "nome": "Ana Silva", "email": "ana@cdmcentral.com", "role": "gestor", "avatar": "AS" },
+    { "id": 3, "nome": "Carlos Mendes", "email": "carlos@cdmcentral.com", "role": "comercial", "avatar": "CM" }
+  ],
+  "iaHistorico": [
+    { "role": "assistant", "content": "Olá! Sou a IA CDM, sua assistente de marketing. Posso ajudar com campanhas, copies, roteiros, análise de métricas e muito mais. Como posso ajudar?" }
+  ]
+}

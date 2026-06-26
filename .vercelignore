@@ -1,0 +1,6 @@
+legacy/
+supabase/
+.vscode/
+.env
+.env.*
+agent-tools/
