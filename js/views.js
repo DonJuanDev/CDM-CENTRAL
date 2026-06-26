@@ -702,63 +702,96 @@ export const Views = {
       return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
     };
 
+    const metaMaster = (byProvider.meta_ads || []).find(
+      i => !i.client_id && i.status === 'connected'
+    ) || (byProvider.meta_ads || []).find(i => i.settings?.mode === 'business_manager' && i.status === 'connected')
+      || (byProvider.meta_ads || []).find(i => !i.client_id && i.status !== 'disconnected');
+
+    const metaConnected = !!metaMaster && metaMaster.status === 'connected';
+    const metaSyncing = metaMaster?.status === 'syncing';
+    const metaError = metaMaster?.status === 'error';
+    const lastSummary = metaMaster?.settings?.last_sync_summary || null;
+
     const providerCard = (p) => {
-      const list = byProvider[p.id] || [];
-      const conn = list.find(i => i.status === 'connected');
-      const syncing = list.some(i => i.status === 'syncing');
-      const hasErr = list.some(i => i.status === 'error');
-      const isConnected = !!conn;
+      if (p.id !== 'meta_ads') {
+        const list = byProvider[p.id] || [];
+        const conn = list.find(i => i.status === 'connected');
+        const isConnected = !!conn;
+        return `<div class="int-card int-card--soon" data-provider="${p.id}">
+          <div class="int-card-header">
+            <div class="int-card-icon" style="background:${p.color}18;border-color:${p.color}30"><span>${p.icon}</span></div>
+            <div class="int-card-info">
+              <div class="int-card-name">${p.name} <span class="int-badge-soon">Em breve</span></div>
+              <div class="int-card-desc">${p.desc}</div>
+            </div>
+          </div>
+          <div class="int-card-actions"><button class="btn btn-ghost btn-sm" disabled>Em desenvolvimento</button></div>
+        </div>`;
+      }
 
       let statusClass = 'disconnected', statusLabel = 'Desconectado';
-      if (syncing)     { statusClass = 'syncing';      statusLabel = 'Sincronizando…'; }
-      else if (hasErr) { statusClass = 'error';        statusLabel = 'Erro na sincronização'; }
-      else if (isConnected) { statusClass = 'connected'; statusLabel = 'Conectado'; }
+      if (metaSyncing) { statusClass = 'syncing'; statusLabel = 'Sincronizando todas as contas…'; }
+      else if (metaError) { statusClass = 'error'; statusLabel = 'Erro na sincronização'; }
+      else if (metaConnected) { statusClass = 'connected'; statusLabel = 'Conta mãe conectada'; }
 
-      const lastSync = fmtSync(conn?.last_sync);
-      const clientName = conn?.clients?.company_name ? escapeHtml(conn.clients.company_name) : '';
+      const lastSync = fmtSync(metaMaster?.last_sync);
+      const accountsInfo = lastSummary
+        ? `${lastSummary.accounts_synced}/${lastSummary.accounts_total} contas · ${lastSummary.records} campanhas`
+        : '';
 
-      return `<div class="int-card ${statusClass}${!p.ready ? ' int-card--soon' : ''}" data-provider="${p.id}">
+      return `<div class="int-card ${statusClass}" data-provider="meta_ads">
         <div class="int-card-header">
-          <div class="int-card-icon" style="background:${p.color}18;border-color:${p.color}30">
-            <span>${p.icon}</span>
-          </div>
+          <div class="int-card-icon" style="background:${p.color}18;border-color:${p.color}30"><span>${p.icon}</span></div>
           <div class="int-card-info">
-            <div class="int-card-name">${p.name}${!p.ready ? ' <span class="int-badge-soon">Em breve</span>' : ''}</div>
-            <div class="int-card-desc">${p.desc}</div>
+            <div class="int-card-name">${p.name}</div>
+            <div class="int-card-desc">Conecte a conta mãe do Business Manager e sincronize <strong>todas</strong> as contas de anúncios de uma vez.</div>
           </div>
         </div>
         <div class="int-card-status">
           <span class="int-status-dot ${statusClass}"></span>
           <span class="int-status-label">${statusLabel}</span>
-          ${clientName ? `<span class="int-status-client">· ${clientName}</span>` : ''}
           ${lastSync ? `<span class="int-status-sync">· ${lastSync}</span>` : ''}
+          ${accountsInfo ? `<span class="int-status-client">· ${accountsInfo}</span>` : ''}
         </div>
-        ${p.ready ? `<div class="int-card-actions">
-          ${isConnected
-            ? `<button class="btn btn-ghost btn-sm" data-int-sync="${conn.id}" data-provider="${p.id}"${syncing ? ' disabled' : ''}>↻ Sincronizar</button>
-               <button class="btn btn-ghost btn-sm" data-int-connect data-provider="${p.id}" data-edit-mode="1">Configurar</button>
-               <button class="btn btn-ghost btn-sm btn-danger-ghost" data-int-disconnect="${conn.id}">Desconectar</button>`
-            : `<button class="btn btn-primary btn-sm" data-int-connect data-provider="${p.id}">Conectar</button>`
+        <div class="int-card-actions">
+          ${metaConnected
+            ? `<button class="btn btn-primary btn-sm" data-int-sync="${metaMaster.id}"${metaSyncing ? ' disabled' : ''}>↻ Sincronizar todas</button>
+               <button class="btn btn-ghost btn-sm" data-int-mappings="${metaMaster.id}">Vincular contas</button>
+               <button class="btn btn-ghost btn-sm" data-int-connect data-provider="meta_ads" data-edit-mode="1">Atualizar token</button>
+               <button class="btn btn-ghost btn-sm btn-danger-ghost" data-int-disconnect="${metaMaster.id}">Desconectar</button>`
+            : `<button class="btn btn-primary btn-sm" data-int-connect data-provider="meta_ads">Conectar conta mãe</button>`
           }
-        </div>` : `<div class="int-card-actions">
-          <button class="btn btn-ghost btn-sm" disabled>Em desenvolvimento</button>
-        </div>`}
+        </div>
       </div>`;
     };
 
-    const clientOptions = clients.map(c => `<option value="${c.id}">${escapeHtml(c.company_name)}</option>`).join('');
+    const mappingsPanelHtml = metaMaster ? `
+      <div id="int-mappings-panel" class="int-mappings-panel card hidden">
+        <div class="int-mappings-header">
+          <div>
+            <div class="int-guide-title">Vincular contas de anúncios → clientes CDM</div>
+            <p class="settings-desc">Contas não vinculadas não entram no sync. O CDM tenta casar automaticamente pelo nome.</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="int-mappings-close">Fechar</button>
+        </div>
+        <div id="int-mappings-loading" class="loading" style="padding:24px"><div class="spinner"></div></div>
+        <div id="int-mappings-body" class="hidden"></div>
+        <div class="int-mappings-footer hidden" id="int-mappings-footer">
+          <button type="button" class="btn btn-primary" id="int-mappings-save">Salvar vínculos</button>
+        </div>
+      </div>` : '';
 
     return `
       ${pageHeader('Integrações', 'Conecte suas plataformas ao CDM Central')}
 
       <div class="int-setup-guide card">
-        <div class="int-guide-title">📘 Como conectar o Meta Ads</div>
+        <div class="int-guide-title">📘 Como conectar a conta mãe (Business Manager)</div>
         <ol class="int-guide-steps">
-          <li>Acesse <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">developers.facebook.com/tools/explorer</a></li>
-          <li>Selecione seu App → clique em <strong>Gerar Token de Acesso do Usuário</strong></li>
-          <li>Marque as permissões: <code>ads_read</code>, <code>business_management</code>, <code>ads_management</code></li>
-          <li>Clique em <strong>Gerar Token de Longa Duração</strong> (válido 60 dias)</li>
-          <li>Copie o token e o ID da conta de anúncios (<code>act_XXXXXXXXXX</code>) e clique em <strong>Conectar</strong></li>
+          <li>Acesse <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener">business.facebook.com → Configurações → Usuários do sistema</a></li>
+          <li>Crie ou selecione um <strong>Usuário do Sistema</strong> com acesso a <strong>todas</strong> as contas de anúncios</li>
+          <li>Gere o token com permissões: <code>ads_read</code>, <code>ads_management</code>, <code>business_management</code></li>
+          <li>Clique em <strong>Conectar conta mãe</strong> abaixo e cole o token — pronto!</li>
+          <li>O CDM descobre automaticamente American Cut, Lunarfilm, Antichip e todas as outras contas</li>
         </ol>
       </div>
 
@@ -766,16 +799,15 @@ export const Views = {
         ${PROVIDERS.map(p => providerCard(p)).join('')}
       </div>
 
-      <!-- Modal de conexão -->
+      ${mappingsPanelHtml}
+
       <div id="int-modal" class="int-modal-overlay hidden" role="dialog" aria-modal="true">
         <div class="int-modal-panel card">
           <div class="int-modal-header">
             <h3 id="int-modal-title">Conectar</h3>
             <button type="button" id="int-modal-close" class="panel-close" aria-label="Fechar">×</button>
           </div>
-          <div id="int-modal-body">
-            <!-- Preenchido por JS -->
-          </div>
+          <div id="int-modal-body"></div>
         </div>
       </div>`;
   },

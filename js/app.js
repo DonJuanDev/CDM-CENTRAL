@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260626b');
+    viewsModulePromise = import('./views.js?v=20260626c');
   }
   return viewsModulePromise;
 }
@@ -231,21 +231,19 @@ async function bindViewEvents(view) {
   if (view === 'integracoes') {
     const refresh = () => navigate('integracoes', { force: true, skipHistory: true });
 
-    // Verifica retorno de OAuth (Meta redireciona de volta com ?oauth_connected=...)
     const hash = window.location.hash;
     if (hash.includes('oauth_connected=') || hash.includes('oauth_error=')) {
       const params = new URLSearchParams(hash.split('?')[1] || '');
       if (params.get('oauth_connected')) {
-        showToast(`${params.get('oauth_connected')} conectado com sucesso!`, 'success');
+        showToast('Meta Ads conectado com sucesso!', 'success');
       } else if (params.get('oauth_error')) {
         showToast(`Erro OAuth: ${params.get('oauth_error')}`, 'error');
       }
-      // Limpa os query params do hash sem recarregar
       window.history.replaceState(null, '', window.location.pathname + '#/integracoes');
     }
 
-    function openIntModal(providerName, bodyHtml) {
-      $('#int-modal-title').textContent = providerName;
+    function openIntModal(title, bodyHtml) {
+      $('#int-modal-title').textContent = title;
       $('#int-modal-body').innerHTML = bodyHtml;
       $('#int-modal').classList.remove('hidden');
       $('#overlay').classList.remove('hidden');
@@ -258,98 +256,166 @@ async function bindViewEvents(view) {
 
     $('#int-modal-close')?.addEventListener('click', closeIntModal);
 
-    // ── Botão CONECTAR ────────────────────────────────────────────────
-    $$('[data-int-connect]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const provider = btn.dataset.provider;
-        const isEdit = btn.dataset.editMode === '1';
+    async function loadMappingsPanel(integrationId) {
+      const panel = $('#int-mappings-panel');
+      const loading = $('#int-mappings-loading');
+      const body = $('#int-mappings-body');
+      const footer = $('#int-mappings-footer');
+      if (!panel) return;
 
-        // Busca clientes para o select
-        const { clientsApi } = await import('./api/crud.js?v=20260622a');
-        const clients = await clientsApi.list({ order: { column: 'company_name', asc: true } }).catch(() => []);
-        const clientOptions = clients.map(c => `<option value="${c.id}">${escapeHtml(c.company_name)}</option>`).join('');
+      panel.classList.remove('hidden');
+      loading?.classList.remove('hidden');
+      body?.classList.add('hidden');
+      footer?.classList.add('hidden');
 
-        const providerLabels = {
-          meta_ads: { name: 'Meta Ads', fieldLabel: 'Access Token', field2Label: 'Ad Account ID', field2Hint: 'Formato: act_XXXXXXXXX ou somente o número' },
+      try {
+        const [{ integrationsService }, { clientsApi }] = await Promise.all([
+          import('./services/integrations.js?v=20260626c'),
+          import('./api/crud.js?v=20260622a'),
+        ]);
+        const [{ accounts }, clients] = await Promise.all([
+          integrationsService.listAdAccounts(integrationId),
+          clientsApi.list({ order: { column: 'company_name', asc: true } }),
+        ]);
+
+        const clientOptions = clients.map(c =>
+          `<option value="${c.id}">${escapeHtml(c.company_name)}</option>`
+        ).join('');
+
+        body.innerHTML = `
+          <div class="int-mappings-table-wrap">
+            <table class="notion-table">
+              <thead><tr><th>Conta Meta</th><th>ID</th><th>Cliente CDM</th></tr></thead>
+              <tbody>
+                ${accounts.map(a => {
+                  const selected = a.matched_client_id || '';
+                  const autoBadge = a.matched_client_id && !a.manual_mapping
+                    ? '<span class="int-map-auto">auto</span>' : '';
+                  return `<tr>
+                    <td>${escapeHtml(a.name)} ${autoBadge}</td>
+                    <td style="font-family:monospace;font-size:11px;color:var(--text-tertiary)">${escapeHtml(a.id)}</td>
+                    <td>
+                      <select class="form-input int-map-select" data-account-id="${escapeHtml(a.id)}">
+                        <option value="">— Não sincronizar —</option>
+                        ${clientOptions.replace(
+                          `value="${selected}"`,
+                          `value="${selected}" selected`
+                        )}
+                      </select>
+                    </td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+
+        accounts.forEach(a => {
+          const sel = body.querySelector(`[data-account-id="${CSS.escape(a.id)}"]`);
+          if (sel && a.matched_client_id) sel.value = a.matched_client_id;
+        });
+
+        loading?.classList.add('hidden');
+        body?.classList.remove('hidden');
+        footer?.classList.remove('hidden');
+
+        $('#int-mappings-save').onclick = async () => {
+          const mappings = {};
+          body.querySelectorAll('.int-map-select').forEach(sel => {
+            if (sel.value) mappings[sel.dataset.accountId] = sel.value;
+          });
+          try {
+            await integrationsService.saveMappings(integrationId, mappings);
+            showToast('Vínculos salvos!', 'success');
+            refresh();
+          } catch (err) {
+            showToast(err.message || 'Erro ao salvar', 'error');
+          }
         };
-        const def = providerLabels[provider] || { name: provider, fieldLabel: 'Access Token', field2Label: 'ID da Conta' };
+      } catch (err) {
+        loading.innerHTML = `<p style="color:var(--danger);padding:16px">${escapeHtml(err.message)}</p>`;
+      }
+    }
 
+    $('#int-mappings-close')?.addEventListener('click', () => {
+      $('#int-mappings-panel')?.classList.add('hidden');
+    });
+
+    $$('[data-int-mappings]').forEach(btn => {
+      btn.addEventListener('click', () => loadMappingsPanel(btn.dataset.intMappings));
+    });
+
+    $$('[data-int-connect]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const isEdit = btn.dataset.editMode === '1';
         const formHtml = `
-          <form id="int-connect-form" style="padding:0 0 4px">
+          <form id="int-connect-form">
+            <p class="settings-desc" style="margin-bottom:16px">
+              Cole o token do <strong>Usuário do Sistema</strong> do Business Manager.
+              O CDM vai descobrir e sincronizar <strong>todas</strong> as contas de anúncios automaticamente.
+            </p>
             <div class="form-group">
-              <label class="form-label">Cliente CDM *</label>
-              <select class="form-input" id="int-client-id" required>
-                <option value="">Selecione o cliente…</option>
-                ${clientOptions}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">${def.fieldLabel} *</label>
-              <textarea class="form-input" id="int-token" rows="3" required placeholder="Cole aqui o token gerado no Meta for Developers…" style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
+              <label class="form-label">Token de acesso *</label>
+              <textarea class="form-input" id="int-token" rows="4" required
+                placeholder="Cole aqui o token gerado no Business Manager…"
+                style="font-family:monospace;font-size:12px;resize:vertical"></textarea>
               <span class="form-hint">
-                Acesse <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a>,
-                gere com permissões <code>ads_read</code> e <code>business_management</code>.
+                <a href="https://business.facebook.com/settings/system-users" target="_blank" rel="noopener">
+                  business.facebook.com → Usuários do sistema → Gerar token
+                </a>
               </span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">${def.field2Label} *</label>
-              <input class="form-input" id="int-account-id" required placeholder="Ex.: act_123456789">
-              ${def.field2Hint ? `<span class="form-hint">${def.field2Hint}</span>` : ''}
             </div>
             <div id="int-connect-error" class="form-error hidden" style="margin-bottom:12px"></div>
             <div style="display:flex;gap:10px;justify-content:flex-end">
               <button type="button" class="btn btn-ghost" id="int-connect-cancel">Cancelar</button>
               <button type="submit" class="btn btn-primary" id="int-connect-submit">
-                ${isEdit ? 'Salvar alterações' : 'Conectar e validar'}
+                ${isEdit ? 'Atualizar token' : 'Conectar conta mãe'}
               </button>
             </div>
           </form>`;
 
-        openIntModal(`${isEdit ? 'Configurar' : 'Conectar'} ${def.name}`, formHtml);
+        openIntModal(isEdit ? 'Atualizar token Meta Ads' : 'Conectar conta mãe Meta Ads', formHtml);
 
         $('#int-connect-cancel').addEventListener('click', closeIntModal);
         $('#int-connect-form').addEventListener('submit', async (e) => {
           e.preventDefault();
           const errEl = $('#int-connect-error');
           const submitBtn = $('#int-connect-submit');
-          const clientId = $('#int-client-id').value;
           const token = $('#int-token').value.trim();
-          const accountId = $('#int-account-id').value.trim();
 
           errEl.classList.add('hidden');
           submitBtn.disabled = true;
-          submitBtn.textContent = 'Validando…';
+          submitBtn.textContent = 'Validando token…';
 
           try {
-            const { integrationsService } = await import('./services/integrations.js?v=20260626a');
-            await integrationsService.connect(provider, clientId, {
-              access_token: token,
-              ad_account_id: accountId,
-            });
+            const { integrationsService } = await import('./services/integrations.js?v=20260626c');
+            const result = await integrationsService.connectBusinessManager('meta_ads', token);
             closeIntModal();
-            showToast('Integração conectada com sucesso!', 'success');
+            const count = result.ad_accounts_found ?? 0;
+            showToast(`Conta mãe conectada! ${count} conta(s) de anúncios encontrada(s).`, 'success');
             refresh();
           } catch (err) {
             errEl.textContent = err.message || 'Erro ao conectar';
             errEl.classList.remove('hidden');
             submitBtn.disabled = false;
-            submitBtn.textContent = isEdit ? 'Salvar alterações' : 'Conectar e validar';
+            submitBtn.textContent = isEdit ? 'Atualizar token' : 'Conectar conta mãe';
           }
         });
       });
     });
 
-    // ── Botão SINCRONIZAR ─────────────────────────────────────────────
     $$('[data-int-sync]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const integrationId = btn.dataset.intSync;
         const origText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = '↻ Sincronizando…';
+        btn.textContent = '↻ Sincronizando todas…';
         try {
-          const { integrationsService } = await import('./services/integrations.js?v=20260626a');
+          const { integrationsService } = await import('./services/integrations.js?v=20260626c');
           const result = await integrationsService.sync(integrationId);
-          showToast(`Sync concluído: ${result.records} campanhas atualizadas (${result.period || ''})`, 'success');
+          const unmatched = result.unmatched?.length ?? 0;
+          let msg = `Sync concluído: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`;
+          if (unmatched) msg += ` · ${unmatched} sem vínculo`;
+          showToast(msg, unmatched ? 'warning' : 'success');
           refresh();
         } catch (err) {
           showToast(err.message || 'Erro na sincronização', 'error');
@@ -359,13 +425,12 @@ async function bindViewEvents(view) {
       });
     });
 
-    // ── Botão DESCONECTAR ─────────────────────────────────────────────
     $$('[data-int-disconnect]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const integrationId = btn.dataset.intDisconnect;
-        if (!confirm('Tem certeza que deseja desconectar esta integração? Os dados de campanha já sincronizados não serão apagados.')) return;
+        if (!confirm('Desconectar a conta mãe? Os dados já sincronizados permanecem no Tráfego Pago.')) return;
         try {
-          const { integrationsService } = await import('./services/integrations.js?v=20260626a');
+          const { integrationsService } = await import('./services/integrations.js?v=20260626c');
           await integrationsService.disconnect(integrationId);
           showToast('Integração desconectada', 'success');
           refresh();
@@ -383,23 +448,26 @@ async function bindViewEvents(view) {
       syncBtn.addEventListener('click', async () => {
         const msg = $('#trafego-sync-msg');
         syncBtn.disabled = true;
-        syncBtn.innerHTML = '↻ Sincronizando…';
+        syncBtn.innerHTML = '↻ Sincronizando todas…';
         msg.textContent = '';
         try {
           const { integrationsApi } = await import('./api/crud.js?v=20260622a');
-          const { integrationsService } = await import('./services/integrations.js?v=20260626a');
+          const { integrationsService } = await import('./services/integrations.js?v=20260626c');
           const integrations = await integrationsApi.list();
-          const metaConns = integrations.filter(i => i.provider === 'meta_ads' && i.status === 'connected');
-          if (!metaConns.length) {
-            msg.textContent = 'Nenhuma conta Meta Ads conectada. Vá em Integrações.';
+          const master = integrations.find(i =>
+            i.provider === 'meta_ads' && i.status === 'connected' && !i.client_id
+          ) || integrations.find(i =>
+            i.provider === 'meta_ads' && i.status === 'connected'
+          );
+          if (!master) {
+            msg.textContent = 'Conecte a conta mãe em Integrações primeiro.';
             return;
           }
-          let total = 0;
-          for (const conn of metaConns) {
-            const result = await integrationsService.sync(conn.id);
-            total += result.records || 0;
-          }
-          showToast(`Sync concluído: ${total} campanhas atualizadas`, 'success');
+          const result = await integrationsService.sync(master.id);
+          showToast(
+            `Sync: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`,
+            'success'
+          );
           navigate('trafego', { force: true, skipHistory: true });
         } catch (err) {
           msg.textContent = err.message || 'Erro na sincronização';

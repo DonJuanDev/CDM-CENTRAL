@@ -2349,6 +2349,47 @@ body.cal-day-open { overflow: hidden; }
   font-weight: 600;
 }
 
+.int-mappings-panel {
+  margin-top: 24px;
+  padding: 20px 24px;
+}
+
+.int-mappings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.int-mappings-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.int-mappings-table-wrap .int-map-select {
+  min-width: 200px;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.int-map-auto {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.12);
+  border-radius: 20px;
+  padding: 1px 7px;
+  margin-left: 4px;
+}
+
+.int-mappings-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
 /* ── Tráfego Pago — métricas ── */
 .metrics-row {
   display: grid;

@@ -23,22 +23,31 @@ async function callIntegration(action, body = {}) {
 }
 
 export const integrationsService = {
-  /** Lista todas as integrações cadastradas (com dados dos clientes) */
   list: () => callIntegration('list'),
 
-  /** Conecta uma integração com token manual */
+  /** Conecta conta mãe (Business Manager) — só precisa do token */
+  connectBusinessManager: (provider, accessToken) =>
+    callIntegration('connect', {
+      provider,
+      mode: 'business_manager',
+      settings: { access_token: accessToken },
+    }),
+
   connect: (provider, clientId, settings) =>
     callIntegration('connect', { provider, client_id: clientId || null, settings }),
 
-  /** Sincroniza dados da plataforma externa para o banco */
   sync: (integrationId) =>
     callIntegration('sync', { integration_id: integrationId }),
 
-  /** Remove as credenciais e marca como desconectado */
   disconnect: (integrationId) =>
     callIntegration('disconnect', { integration_id: integrationId }),
 
-  /** Inicia fluxo OAuth (retorna URL para redirecionar) */
-  oauthStart: (provider, clientId) =>
-    callIntegration('oauth_start', { provider, client_id: clientId || null }),
+  listAdAccounts: (integrationId) =>
+    callIntegration('list_ad_accounts', { integration_id: integrationId }),
+
+  saveMappings: (integrationId, mappings) =>
+    callIntegration('save_mappings', { integration_id: integrationId, mappings }),
+
+  oauthStart: (provider) =>
+    callIntegration('oauth_start', { provider }),
 };
