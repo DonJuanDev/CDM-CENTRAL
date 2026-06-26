@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260626a');
+    viewsModulePromise = import('./views.js?v=20260626b');
   }
   return viewsModulePromise;
 }
@@ -126,7 +126,7 @@ async function bindViewEvents(view) {
       const entity = btn.dataset.create;
       let extra = {};
       try { extra = JSON.parse(btn.dataset.extra || '{}'); } catch {}
-      const { openCrudModal } = await import('./forms.js?v=20260621a');
+      const { openCrudModal } = await import('./forms.js?v=20260626b');
       openCrudModal(entity, Object.keys(extra).length ? extra : null, refresh);
     };
   });
@@ -145,7 +145,7 @@ async function bindViewEvents(view) {
       if (!api) return;
       try {
         const record = await api.get(id);
-        const { openCrudModal } = await import('./forms.js?v=20260621a');
+        const { openCrudModal } = await import('./forms.js?v=20260626b');
         openCrudModal(entity, record, refresh);
       } catch (e) { handleError(e); }
     };

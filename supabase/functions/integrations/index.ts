@@ -16,10 +16,6 @@ function json(data: unknown, status = 200) {
   });
 }
 
-// ──────────────────────────────────────────────────────────────
-// META ADS SYNC
-// Busca campanhas + insights do mês atual e faz upsert na tabela campaigns
-// ──────────────────────────────────────────────────────────────
 async function syncMetaAds(
   supabase: ReturnType<typeof createClient>,
   integration: Record<string, unknown>
@@ -36,7 +32,6 @@ async function syncMetaAds(
 
   const accountId = rawAccountId.startsWith("act_") ? rawAccountId : `act_${rawAccountId}`;
 
-  // 1 – Buscar campanhas
   const campaignsRes = await fetch(
     `${META_GRAPH}/${accountId}/campaigns` +
     `?fields=id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time` +
@@ -52,7 +47,6 @@ async function syncMetaAds(
   const campaigns = campaignsPayload.data ?? [];
   if (!campaigns.length) return { records: 0, campaigns: 0, period: "" };
 
-  // 2 – Buscar insights do mês atual
   const now = new Date();
   const since = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const until = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -69,7 +63,6 @@ async function syncMetaAds(
     : { data: [] };
   const insights = insightsPayload.data ?? [];
 
-  // Map de insights por campaign_id
   const insightMap: Record<string, Record<string, unknown>> = {};
   for (const ins of insights) insightMap[ins.campaign_id as string] = ins;
 
@@ -105,9 +98,8 @@ async function syncMetaAds(
     const roas = spent > 0 && revenue > 0 ? parseFloat((revenue / spent).toFixed(2)) : 0;
     const cpa = leads > 0 && spent > 0 ? parseFloat((spent / leads).toFixed(2)) : 0;
 
-    // Budget: Meta retorna em centavos para algumas moedas
     const rawBudget = parseFloat(campaign.daily_budget ?? campaign.lifetime_budget ?? "0");
-    const budget = rawBudget > 1000 ? rawBudget / 100 : rawBudget; // heurística simples
+    const budget = rawBudget > 1000 ? rawBudget / 100 : rawBudget;
 
     const payload = {
       client_id: clientId,
@@ -142,9 +134,6 @@ async function syncMetaAds(
   return { records: synced, campaigns: campaigns.length, period: `${since} → ${until}` };
 }
 
-// ──────────────────────────────────────────────────────────────
-// HANDLER PRINCIPAL
-// ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -159,7 +148,6 @@ Deno.serve(async (req) => {
     const body: Record<string, unknown> =
       req.method === "POST" ? await req.json().catch(() => ({})) : {};
 
-    // ── OAUTH CALLBACK (sem auth header — vem de redirect do browser) ──
     if (action === "oauth_callback") {
       const code = url.searchParams.get("code");
       const stateRaw = url.searchParams.get("state");
@@ -185,7 +173,6 @@ Deno.serve(async (req) => {
         const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
 
         if (appId && appSecret && state.integration_id) {
-          // Troca code → short-lived token
           const tokenRes = await fetch(
             `${META_GRAPH}/oauth/access_token` +
             `?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -194,7 +181,6 @@ Deno.serve(async (req) => {
           const tokenData = (await tokenRes.json()) as { access_token?: string };
 
           if (tokenData.access_token) {
-            // Troca short-lived → long-lived (60 dias)
             const exchangeRes = await fetch(
               `${META_GRAPH}/oauth/access_token` +
               `?grant_type=fb_exchange_token&client_id=${appId}` +
@@ -218,7 +204,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── TODAS AS OUTRAS ACTIONS PRECISAM DE AUTH ──
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Unauthorized" }, 401);
 
@@ -227,7 +212,6 @@ Deno.serve(async (req) => {
     );
     if (authError || !user) return json({ error: "Token inválido" }, 401);
 
-    // ── ACTIONS ──
     switch (action) {
       case "list": {
         const { data, error } = await supabase
@@ -247,7 +231,6 @@ Deno.serve(async (req) => {
 
         if (!provider) return json({ error: "provider é obrigatório" }, 400);
 
-        // Valida token do Meta antes de salvar
         if (provider === "meta_ads" && settings?.access_token) {
           const meRes = await fetch(
             `${META_GRAPH}/me?access_token=${settings.access_token}&fields=id,name`
@@ -362,7 +345,6 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Cria / recupera a integração para ter um ID para o state
         const { data: integration } = await supabase
           .from("integrations")
           .upsert(

@@ -205,10 +205,13 @@ export const Views = {
       <tr data-edit="clients" data-id="${c.id}" class="notion-row">
         <td class="notion-cell-name">${escapeHtml(c.company_name)}</td>
         <td>${escapeHtml(c.instagram || '—')}</td>
-        <td>${escapeHtml(c.facebook || '—')}</td>
-        <td>${escapeHtml(c.tiktok || '—')}</td>
+        <td>${escapeHtml(c.instagram_password || '—')}</td>
+        <td>${escapeHtml(c.tiktok_password || '—')}</td>
+        <td>${escapeHtml(c.facebook_password || '—')}</td>
+        <td>${escapeHtml(c.email || '—')}</td>
+        <td>${escapeHtml(c.email_password || '—')}</td>
         <td>${escapeHtml(c.linktree || '—')}</td>
-        <td>${escapeHtml(c.claude || '—')}</td>
+        <td>${escapeHtml(c.linktree_password || '—')}</td>
       </tr>`).join('');
 
     return `
@@ -228,7 +231,10 @@ export const Views = {
       <div id="client-panel-senhas" class="client-panel hidden">
         <div class="table-wrapper notion-table-wrap">
           <table class="notion-table">
-            <thead><tr><th>Cliente</th><th>Instagram</th><th>Facebook</th><th>TikTok</th><th>Linktree</th><th>Claude</th></tr></thead>
+            <thead><tr>
+              <th>Cliente</th><th>Login</th><th>Senha Insta</th><th>Senha TikTok</th>
+              <th>Senha Face</th><th>E-mail</th><th>Senha E-mail</th><th>Linktree</th><th>Senha Linktree</th>
+            </tr></thead>
             <tbody>${senhasRows}</tbody>
           </table>
         </div>
