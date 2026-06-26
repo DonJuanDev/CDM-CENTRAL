@@ -338,17 +338,65 @@ export const Views = {
 
   async trafego(profile) {
     const campaigns = await campaignsApi.list({ order: { column: 'created_at' } });
+
+    const totalSpent   = campaigns.reduce((s, c) => s + (c.spent  || 0), 0);
+    const totalLeads   = campaigns.reduce((s, c) => s + (c.leads  || 0), 0);
+    const avgRoas      = campaigns.filter(c => c.roas > 0);
+    const roasMedia    = avgRoas.length ? (avgRoas.reduce((s, c) => s + c.roas, 0) / avgRoas.length).toFixed(2) : '0.00';
+    const ativas       = campaigns.filter(c => c.status === 'ativa').length;
+
+    const platformIcon = { meta_ads: '📘', google_ads: '🔍', tiktok_ads: '🎵' };
+
+    const syncBannerHtml = canManage(profile) ? `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <button class="btn btn-ghost btn-sm" id="trafego-sync-btn" style="display:flex;align-items:center;gap:6px">
+          <span>↻</span> Sincronizar Meta Ads
+        </button>
+        <span id="trafego-sync-msg" style="font-size:12px;color:var(--text-tertiary)"></span>
+      </div>` : '';
+
+    const actions = canManage(profile)
+      ? `<div style="display:flex;gap:8px">${syncBannerHtml}<button class="btn btn-primary" data-create="campaigns">+ Nova Campanha</button></div>`
+      : '';
+
     return `
-      ${pageHeader('Tráfego Pago', `${campaigns.length} campanhas`, canManage(profile) ? '<button class="btn btn-primary" data-create="campaigns">+ Nova Campanha</button>' : '')}
-      <div class="table-wrapper"><table><thead><tr><th>Campanha</th><th>Cliente</th><th>Plataforma</th><th>Budget</th><th>ROAS</th><th>Leads</th><th>Status</th></tr></thead><tbody>
-        ${campaigns.map(c => `<tr data-edit="campaigns" data-id="${c.id}" style="cursor:pointer">
-          <td style="font-weight:500">${escapeHtml(c.name)}</td><td>${escapeHtml(c.clients?.company_name || '')}</td>
-          <td><span class="tag">${escapeHtml(c.platform)}</span></td>
-          <td>${formatCurrency(c.budget)}</td>
-          <td style="color:${c.roas >= 3 ? 'var(--success)' : 'var(--danger)'}">${c.roas}x</td>
-          <td>${c.leads}</td><td>${statusBadge(c.status)}</td>
-        </tr>`).join('') || `<tr><td colspan="7">${emptyState()}</td></tr>`}
-      </tbody></table></div>`;
+      ${pageHeader('Tráfego Pago', `${campaigns.length} campanhas`, actions)}
+
+      <div class="metrics-row" style="margin-bottom:24px">
+        ${metricCard('Total Gasto', formatCurrency(totalSpent), '💸', 'orange')}
+        ${metricCard('Total Leads', totalLeads.toLocaleString('pt-BR'), '🎯', 'blue')}
+        ${metricCard('ROAS Médio', `${roasMedia}x`, '📈', roasMedia >= 3 ? 'green' : 'red')}
+        ${metricCard('Ativas', ativas, '▶', 'purple')}
+      </div>
+
+      <div class="table-wrapper">
+        <table>
+          <thead><tr>
+            <th>Campanha</th><th>Cliente</th><th>Plataforma</th>
+            <th>Budget</th><th>Gasto</th><th>ROAS</th><th>Leads</th><th>CPA</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            ${campaigns.map(c => {
+              const icon = platformIcon[c.platform] || '📡';
+              const meta = c.metadata || {};
+              const impressionsHtml = meta.impressions
+                ? `<br><span style="font-size:11px;color:var(--text-tertiary)">${Number(meta.impressions).toLocaleString('pt-BR')} impressões</span>`
+                : '';
+              return `<tr data-edit="campaigns" data-id="${c.id}" style="cursor:pointer">
+                <td style="font-weight:500">${escapeHtml(c.name)}${impressionsHtml}</td>
+                <td>${escapeHtml(c.clients?.company_name || '')}</td>
+                <td><span class="tag">${icon} ${escapeHtml(c.platform.replace('_', ' '))}</span></td>
+                <td>${formatCurrency(c.budget)}</td>
+                <td>${formatCurrency(c.spent)}</td>
+                <td style="color:${c.roas >= 3 ? 'var(--success)' : c.roas > 0 ? 'inherit' : 'var(--text-tertiary)';}">${c.roas > 0 ? c.roas + 'x' : '—'}</td>
+                <td>${c.leads || '—'}</td>
+                <td>${c.cpa > 0 ? formatCurrency(c.cpa) : '—'}</td>
+                <td>${statusBadge(c.status)}</td>
+              </tr>`;
+            }).join('') || `<tr><td colspan="9">${emptyState()}</td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
   },
 
   async arquivos(profile) {
@@ -623,21 +671,107 @@ export const Views = {
 
   async integracoes(profile) {
     if (!canManage(profile)) return pageHeader('Acesso negado', 'Apenas gestores e admins');
-    const connected = await integrationsApi.list();
-    const connectedMap = Object.fromEntries(connected.map(i => [i.provider, i]));
+
+    const [integrations, clients] = await Promise.all([
+      integrationsApi.list().catch(() => []),
+      clientsApi.list({ order: { column: 'company_name', asc: true } }).catch(() => []),
+    ]);
+
+    const byProvider = {};
+    integrations.forEach(i => { byProvider[i.provider] = byProvider[i.provider] || []; byProvider[i.provider].push(i); });
+
+    const PROVIDERS = [
+      { id: 'meta_ads',          name: 'Meta Ads',          icon: '📘', color: '#1877f2', desc: 'Campanhas, gasto, ROAS e leads do Facebook e Instagram', ready: true },
+      { id: 'google_analytics',  name: 'Google Analytics',  icon: '📊', color: '#e37400', desc: 'Sessões, usuários, conversões e origem do tráfego',       ready: false },
+      { id: 'google_ads',        name: 'Google Ads',        icon: '🔍', color: '#4285f4', desc: 'Campanhas de pesquisa, display e YouTube',                 ready: false },
+      { id: 'tiktok_ads',        name: 'TikTok Ads',        icon: '🎵', color: '#010101', desc: 'Campanhas e criativos no TikTok',                          ready: false },
+      { id: 'whatsapp_business', name: 'WhatsApp Business', icon: '💬', color: '#25d366', desc: 'Conversas, leads e automações via WhatsApp',               ready: false },
+      { id: 'canva',             name: 'Canva',             icon: '🎨', color: '#00c4cc', desc: 'Templates e designs integrados ao fluxo de produção',      ready: false },
+      { id: 'google_calendar',   name: 'Google Calendar',   icon: '📅', color: '#0f9d58', desc: 'Sincronize reuniões e eventos com o calendário CDM',       ready: false },
+    ];
+
+    const fmtSync = (iso) => {
+      if (!iso) return null;
+      const d = new Date(iso);
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    };
+
+    const providerCard = (p) => {
+      const list = byProvider[p.id] || [];
+      const conn = list.find(i => i.status === 'connected');
+      const syncing = list.some(i => i.status === 'syncing');
+      const hasErr = list.some(i => i.status === 'error');
+      const isConnected = !!conn;
+
+      let statusClass = 'disconnected', statusLabel = 'Desconectado';
+      if (syncing)     { statusClass = 'syncing';      statusLabel = 'Sincronizando…'; }
+      else if (hasErr) { statusClass = 'error';        statusLabel = 'Erro na sincronização'; }
+      else if (isConnected) { statusClass = 'connected'; statusLabel = 'Conectado'; }
+
+      const lastSync = fmtSync(conn?.last_sync);
+      const clientName = conn?.clients?.company_name ? escapeHtml(conn.clients.company_name) : '';
+
+      return `<div class="int-card ${statusClass}${!p.ready ? ' int-card--soon' : ''}" data-provider="${p.id}">
+        <div class="int-card-header">
+          <div class="int-card-icon" style="background:${p.color}18;border-color:${p.color}30">
+            <span>${p.icon}</span>
+          </div>
+          <div class="int-card-info">
+            <div class="int-card-name">${p.name}${!p.ready ? ' <span class="int-badge-soon">Em breve</span>' : ''}</div>
+            <div class="int-card-desc">${p.desc}</div>
+          </div>
+        </div>
+        <div class="int-card-status">
+          <span class="int-status-dot ${statusClass}"></span>
+          <span class="int-status-label">${statusLabel}</span>
+          ${clientName ? `<span class="int-status-client">· ${clientName}</span>` : ''}
+          ${lastSync ? `<span class="int-status-sync">· ${lastSync}</span>` : ''}
+        </div>
+        ${p.ready ? `<div class="int-card-actions">
+          ${isConnected
+            ? `<button class="btn btn-ghost btn-sm" data-int-sync="${conn.id}" data-provider="${p.id}"${syncing ? ' disabled' : ''}>↻ Sincronizar</button>
+               <button class="btn btn-ghost btn-sm" data-int-connect data-provider="${p.id}" data-edit-mode="1">Configurar</button>
+               <button class="btn btn-ghost btn-sm btn-danger-ghost" data-int-disconnect="${conn.id}">Desconectar</button>`
+            : `<button class="btn btn-primary btn-sm" data-int-connect data-provider="${p.id}">Conectar</button>`
+          }
+        </div>` : `<div class="int-card-actions">
+          <button class="btn btn-ghost btn-sm" disabled>Em desenvolvimento</button>
+        </div>`}
+      </div>`;
+    };
+
+    const clientOptions = clients.map(c => `<option value="${c.id}">${escapeHtml(c.company_name)}</option>`).join('');
+
     return `
-      ${pageHeader('Integrações API', 'Meta Ads, Google, TikTok, WhatsApp, Canva, Calendar')}
-      <div class="integration-grid">
-        ${INTEGRATION_PROVIDERS.map(p => {
-          const c = connectedMap[p.id];
-          return `<div class="integration-card ${c?.status === 'connected' ? 'connected' : ''}" data-provider="${p.id}">
-            <div style="font-size:28px">${p.icon}</div>
-            <div class="integration-name">${p.name}</div>
-            <div class="integration-status">${c?.status === 'connected' ? '● Conectado' : '○ Desconectado'}</div>
-          </div>`;
-        }).join('')}
+      ${pageHeader('Integrações', 'Conecte suas plataformas ao CDM Central')}
+
+      <div class="int-setup-guide card">
+        <div class="int-guide-title">📘 Como conectar o Meta Ads</div>
+        <ol class="int-guide-steps">
+          <li>Acesse <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">developers.facebook.com/tools/explorer</a></li>
+          <li>Selecione seu App → clique em <strong>Gerar Token de Acesso do Usuário</strong></li>
+          <li>Marque as permissões: <code>ads_read</code>, <code>business_management</code>, <code>ads_management</code></li>
+          <li>Clique em <strong>Gerar Token de Longa Duração</strong> (válido 60 dias)</li>
+          <li>Copie o token e o ID da conta de anúncios (<code>act_XXXXXXXXXX</code>) e clique em <strong>Conectar</strong></li>
+        </ol>
       </div>
-      <p style="margin-top:16px;font-size:13px;color:var(--text-tertiary)">Configure credenciais via Edge Function <code>integrations</code></p>`;
+
+      <div class="int-grid">
+        ${PROVIDERS.map(p => providerCard(p)).join('')}
+      </div>
+
+      <!-- Modal de conexão -->
+      <div id="int-modal" class="int-modal-overlay hidden" role="dialog" aria-modal="true">
+        <div class="int-modal-panel card">
+          <div class="int-modal-header">
+            <h3 id="int-modal-title">Conectar</h3>
+            <button type="button" id="int-modal-close" class="panel-close" aria-label="Fechar">×</button>
+          </div>
+          <div id="int-modal-body">
+            <!-- Preenchido por JS -->
+          </div>
+        </div>
+      </div>`;
   },
 
   async configuracoes(profile) {
