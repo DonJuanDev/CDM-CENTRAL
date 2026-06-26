@@ -388,7 +388,7 @@ export const Views = {
                 <td><span class="tag">${icon} ${escapeHtml(c.platform.replace('_', ' '))}</span></td>
                 <td>${formatCurrency(c.budget)}</td>
                 <td>${formatCurrency(c.spent)}</td>
-                <td style="color:${c.roas >= 3 ? 'var(--success)' : c.roas > 0 ? 'inherit' : 'var(--text-tertiary)';}">${c.roas > 0 ? c.roas + 'x' : '—'}</td>
+                <td style="color:${c.roas >= 3 ? 'var(--success)' : c.roas > 0 ? 'inherit' : 'var(--text-tertiary)'}">${c.roas > 0 ? c.roas + 'x' : '—'}</td>
                 <td>${c.leads || '—'}</td>
                 <td>${c.cpa > 0 ? formatCurrency(c.cpa) : '—'}</td>
                 <td>${statusBadge(c.status)}</td>
