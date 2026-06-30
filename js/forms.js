@@ -236,7 +236,7 @@ async function buildCrudPayload(form, entity, schema, record, profile) {
   }
 
   if (!record?.id) {
-    payload.created_by = profile?.id;
+    if (entity !== 'notes') payload.created_by = profile?.id;
   }
 
   return payload;

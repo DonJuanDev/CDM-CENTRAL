@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260627b');
+    viewsModulePromise = import('./views.js?v=20260627c');
   }
   return viewsModulePromise;
 }
@@ -127,7 +127,7 @@ async function bindViewEvents(view) {
       const entity = btn.dataset.create;
       let extra = {};
       try { extra = JSON.parse(btn.dataset.extra || '{}'); } catch {}
-      const { openCrudModal } = await import('./forms.js?v=20260627b');
+      const { openCrudModal } = await import('./forms.js?v=20260627c');
       openCrudModal(entity, Object.keys(extra).length ? extra : null, refresh);
     };
   });
@@ -146,7 +146,7 @@ async function bindViewEvents(view) {
       if (!api) return;
       try {
         const record = await api.get(id);
-        const { openCrudModal } = await import('./forms.js?v=20260627b');
+        const { openCrudModal } = await import('./forms.js?v=20260627c');
         openCrudModal(entity, record, refresh);
       } catch (e) { handleError(e); }
     };
@@ -195,9 +195,9 @@ async function bindViewEvents(view) {
     const query = parseHashQuery();
     if (query.nota) {
       try {
-        const { notesApi } = await import('./api/crud.js?v=20260627b');
+        const { notesApi } = await import('./api/crud.js?v=20260627c');
         const record = await notesApi.get(query.nota);
-        const { openCrudModal } = await import('./forms.js?v=20260627b');
+        const { openCrudModal } = await import('./forms.js?v=20260627c');
         openCrudModal('notes', record, refresh);
       } catch (e) {
         handleError(e);
