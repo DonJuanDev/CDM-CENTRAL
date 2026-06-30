@@ -191,7 +191,8 @@ export const Views = {
   },
 
   async clientes(profile) {
-    const clients = await clientsApi.list({ order: { column: 'company_name', asc: true } });
+    const allClients = await clientsApi.list({ order: { column: 'company_name', asc: true } });
+    const clients = allClients.filter(c => c.status !== 'inativo');
     const canEdit = canManage(profile);
     const rows = clients.map(c => `
       <tr data-edit="clients" data-id="${c.id}" class="notion-row">
@@ -199,9 +200,10 @@ export const Views = {
         <td>${areaTag(c.area_atuacao)}</td>
         <td class="notion-cell-muted">${c.notes ? '📎' : '—'}</td>
         <td class="notion-cell-notes">${escapeHtml((c.notes || '').slice(0, 120))}${(c.notes || '').length > 120 ? '…' : ''}</td>
+        ${canEdit ? `<td class="notion-cell-actions"><button type="button" class="btn btn-ghost btn-sm btn-danger-ghost client-delete-btn" data-client-archive="${c.id}" title="Remover da lista (senhas mantidas)">🗑</button></td>` : ''}
       </tr>`).join('');
 
-    const senhasRows = clients.map(c => `
+    const senhasRows = allClients.map(c => `
       <tr data-edit="clients" data-id="${c.id}" class="notion-row">
         <td class="notion-cell-name">${escapeHtml(c.company_name)}</td>
         <td>${escapeHtml(c.instagram || '—')}</td>
@@ -223,8 +225,8 @@ export const Views = {
       <div id="client-panel-lista" class="client-panel">
         <div class="table-wrapper notion-table-wrap">
           <table class="notion-table">
-            <thead><tr><th>Clientes</th><th>Área de Atuação</th><th>Arquivos e mídia</th><th>Observações</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="4">${emptyState()}</td></tr>`}</tbody>
+            <thead><tr><th>Clientes</th><th>Área de Atuação</th><th>Arquivos e mídia</th><th>Observações</th>${canEdit ? '<th></th>' : ''}</tr></thead>
+            <tbody>${rows || `<tr><td colspan="${canEdit ? 5 : 4}">${emptyState()}</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -321,7 +323,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260626d');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260626e');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;

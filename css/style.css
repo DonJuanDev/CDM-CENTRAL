@@ -1698,6 +1698,9 @@ tbody tr:hover { background: var(--bg-card-hover); }
 .notion-cell-name { font-weight: 500; white-space: nowrap; }
 .notion-cell-notes { color: var(--text-secondary); font-size: 12px; max-width: 400px; }
 .notion-cell-muted { color: var(--text-tertiary); text-align: center; }
+.notion-cell-actions { width: 48px; text-align: center; padding: 6px 8px !important; }
+.client-delete-btn { opacity: 0.5; }
+.notion-row:hover .client-delete-btn { opacity: 1; }
 
 .client-icon { margin-right: 4px; }
 

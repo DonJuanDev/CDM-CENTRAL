@@ -148,6 +148,140 @@ const SCHEMAS = {
 
 let clientsCache = [];
 let profilesCache = [];
+let crudState = null;
+
+function serializeCrudForm(form) {
+  if (!form) return '';
+  const parts = [];
+  form.querySelectorAll('input, select, textarea').forEach(el => {
+    if (!el.name) return;
+    if (el.type === 'checkbox') {
+      parts.push(`${el.name}:${el.value}=${el.checked}`);
+    } else if (el.type === 'file') {
+      parts.push(`${el.name}=${el.files?.[0]?.name || ''}`);
+    } else {
+      parts.push(`${el.name}=${el.value}`);
+    }
+  });
+  return parts.sort().join('|');
+}
+
+function isCrudFormDirty() {
+  const form = $('#crud-form');
+  if (!form || !crudState?.initialSnapshot) return false;
+  return serializeCrudForm(form) !== crudState.initialSnapshot;
+}
+
+async function buildCrudPayload(form, entity, schema, record, profile) {
+  const fd = new FormData(form);
+  const payload = {};
+
+  schema.fields.forEach(f => {
+    if (f.type === 'client_multi_select' || f.type === 'team_multi_select') return;
+    let v = fd.get(f.name);
+    if (f.type === 'number') v = v ? parseFloat(v) : null;
+    if (f.name === 'tags') v = v ? v.split(',').map(t => t.trim()).filter(Boolean) : [];
+    if (f.type === 'datetime-local' && v) v = new Date(v).toISOString();
+    if (v !== '' && v !== null) payload[f.name] = v;
+  });
+
+  if (entity === 'tasks') {
+    const checkedIds = [...form.querySelectorAll('input[name="client_ids"]:checked')].map(el => el.value);
+    const selectedClients = checkedIds
+      .map(id => clientsCache.find(c => c.id === id))
+      .filter(Boolean);
+    payload.client_id = selectedClients[0]?.id || null;
+    payload.client_names = selectedClients.length
+      ? selectedClients.map(formatClientLabel).join(', ')
+      : null;
+
+    const checkedMembers = [...form.querySelectorAll('input[name="team_member_names"]:checked')];
+    if (!checkedMembers.length) {
+      throw new Error('SELECT_TEAM_REQUIRED');
+    }
+    const memberNames = checkedMembers.map(el => el.value);
+    payload.assignee_name = memberNames.join(', ');
+    payload.assigned_to = checkedMembers[0]?.dataset?.profileId || null;
+    const colors = memberNames
+      .map(name => findTeamMemberByName(name)?.color || inferColorOwner(name, payload.title || ''))
+      .filter(Boolean);
+    payload.color_owner = colors[0] || null;
+
+    if (payload.status) {
+      payload.column_name = STATUS_TO_COLUMN[payload.status] || 'a_fazer';
+    }
+  }
+
+  if (!record?.id) {
+    payload.created_by = profile?.id;
+    if (entity === 'notes') payload.author_id = profile?.id;
+  }
+
+  return payload;
+}
+
+async function saveCrudForm({ silent = false } = {}) {
+  if (!crudState) return false;
+  const { entity, record, onSave, schema, isEdit } = crudState;
+  const form = $('#crud-form');
+  if (!form) return false;
+
+  const profile = await getProfile();
+
+  let payload;
+  try {
+    payload = await buildCrudPayload(form, entity, schema, record, profile);
+  } catch (err) {
+    if (err.message === 'SELECT_TEAM_REQUIRED') {
+      if (!silent) showToast('Selecione ao menos um responsável', 'error');
+      return false;
+    }
+    throw err;
+  }
+
+  try {
+    let saved;
+    if (isEdit) {
+      saved = await API_MAP[entity].update(record.id, payload);
+    } else {
+      saved = await API_MAP[entity].create(payload);
+    }
+
+    const pdfFile = $('#pdf-file')?.files?.[0];
+    if (pdfFile && saved?.id) {
+      await uploadInvoicePdf(pdfFile, saved.client_id, saved.id);
+    }
+
+    const fileInput = $('#file-input')?.files?.[0];
+    if (fileInput) {
+      await uploadFile(fileInput, { clientId: payload.client_id });
+    }
+
+    if (!silent) {
+      showToast(`${schema.title} ${isEdit ? 'atualizado' : 'criado'} com sucesso`, 'success');
+    }
+    if (entity === 'tasks') invalidatePrefix('calendar:');
+    crudState.initialSnapshot = serializeCrudForm(form);
+    onSave?.();
+    return true;
+  } catch (err) {
+    if (!silent) handleError(err);
+    return false;
+  }
+}
+
+export async function dismissCrudModal() {
+  const modal = $('#detail-modal');
+  if (!modal || modal.classList.contains('hidden')) return false;
+
+  const shouldAutoSave = crudState?.isEdit && crudState?.entity === 'tasks';
+  if (shouldAutoSave && isCrudFormDirty()) {
+    await saveCrudForm({ silent: true });
+  }
+
+  closeCrudModal();
+  return true;
+}
 
 export async function loadClientsCache() {
   clientsCache = await clientsApi.list({ order: { column: 'company_name', asc: true } });
@@ -343,13 +477,29 @@ export async function openCrudModal(entity, record = null, onSave) {
   $('#detail-modal').classList.remove('hidden');
   $('#overlay').classList.remove('hidden');
 
-  $('#crud-cancel').onclick = closeCrudModal;
+  crudState = { entity, record, onSave, schema, isEdit };
+  requestAnimationFrame(() => {
+    const form = $('#crud-form');
+    if (form) crudState.initialSnapshot = serializeCrudForm(form);
+  });
+
+  const closeWithAutoSave = () => dismissCrudModal();
+  $('#crud-cancel').onclick = closeWithAutoSave;
   if (isEdit) {
     $('#crud-delete').onclick = async () => {
-      if (!confirm('Confirmar exclusão?')) return;
+      if (entity === 'clients') {
+        if (!confirm('Remover cliente da lista? As senhas permanecem na aba Senhas Clientes.')) return;
+      } else if (!confirm('Confirmar exclusão?')) {
+        return;
+      }
       try {
-        await API_MAP[entity].remove(record.id);
-        showToast('Excluído com sucesso', 'success');
+        if (entity === 'clients') {
+          await clientsApi.update(record.id, { status: 'inativo' });
+          showToast('Cliente removido. Senhas mantidas.', 'success');
+        } else {
+          await API_MAP[entity].remove(record.id);
+          showToast('Excluído com sucesso', 'success');
+        }
         closeCrudModal();
         onSave?.();
       } catch (e) { handleError(e); }
@@ -358,74 +508,8 @@ export async function openCrudModal(entity, record = null, onSave) {
 
   $('#crud-form').onsubmit = async (e) => {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = {};
-
-    schema.fields.forEach(f => {
-      if (f.type === 'client_multi_select' || f.type === 'team_multi_select') return;
-      let v = fd.get(f.name);
-      if (f.type === 'number') v = v ? parseFloat(v) : null;
-      if (f.name === 'tags') v = v ? v.split(',').map(t => t.trim()).filter(Boolean) : [];
-      if (f.type === 'datetime-local' && v) v = new Date(v).toISOString();
-      if (v !== '' && v !== null) payload[f.name] = v;
-    });
-
-    if (entity === 'tasks') {
-      const checkedIds = [...e.target.querySelectorAll('input[name="client_ids"]:checked')].map(el => el.value);
-      const selectedClients = checkedIds
-        .map(id => clientsCache.find(c => c.id === id))
-        .filter(Boolean);
-      payload.client_id = selectedClients[0]?.id || null;
-      payload.client_names = selectedClients.length
-        ? selectedClients.map(formatClientLabel).join(', ')
-        : null;
-
-      const checkedMembers = [...e.target.querySelectorAll('input[name="team_member_names"]:checked')];
-      if (!checkedMembers.length) {
-        showToast('Selecione ao menos um responsável', 'error');
-        return;
-      }
-      const memberNames = checkedMembers.map(el => el.value);
-      payload.assignee_name = memberNames.join(', ');
-      payload.assigned_to = checkedMembers[0]?.dataset?.profileId || null;
-      const colors = memberNames
-        .map(name => findTeamMemberByName(name)?.color || inferColorOwner(name, payload.title || ''))
-        .filter(Boolean);
-      payload.color_owner = colors[0] || null;
-
-      if (payload.status) {
-        payload.column_name = STATUS_TO_COLUMN[payload.status] || 'a_fazer';
-      }
-    }
-
-    if (!isEdit) {
-      payload.created_by = profile?.id;
-      if (entity === 'notes') payload.author_id = profile?.id;
-    }
-
-    try {
-      let saved;
-      if (isEdit) {
-        saved = await API_MAP[entity].update(record.id, payload);
-      } else {
-        saved = await API_MAP[entity].create(payload);
-      }
-
-      const pdfFile = $('#pdf-file')?.files?.[0];
-      if (pdfFile && saved?.id) {
-        await uploadInvoicePdf(pdfFile, saved.client_id, saved.id);
-      }
-
-      const fileInput = $('#file-input')?.files?.[0];
-      if (fileInput) {
-        await uploadFile(fileInput, { clientId: payload.client_id });
-      }
-
-      showToast(`${schema.title} ${isEdit ? 'atualizado' : 'criado'} com sucesso`, 'success');
-      closeCrudModal();
-      if (entity === 'tasks') invalidatePrefix('calendar:');
-      onSave?.();
-    } catch (err) { handleError(err); }
+    const ok = await saveCrudForm({ silent: false });
+    if (ok) closeCrudModal();
   };
 }
 
@@ -569,6 +653,7 @@ export function openDriveLinkModal({ clientId = null, folderCategoryId = null, f
 function closeCrudModal() {
   $('#detail-modal').classList.add('hidden');
   $('#overlay').classList.add('hidden');
+  crudState = null;
 }
 
 export { closeCrudModal };

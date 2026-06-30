@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260626c');
+    viewsModulePromise = import('./views.js?v=20260626e');
   }
   return viewsModulePromise;
 }
@@ -126,7 +126,7 @@ async function bindViewEvents(view) {
       const entity = btn.dataset.create;
       let extra = {};
       try { extra = JSON.parse(btn.dataset.extra || '{}'); } catch {}
-      const { openCrudModal } = await import('./forms.js?v=20260626b');
+      const { openCrudModal } = await import('./forms.js?v=20260626e');
       openCrudModal(entity, Object.keys(extra).length ? extra : null, refresh);
     };
   });
@@ -145,14 +145,14 @@ async function bindViewEvents(view) {
       if (!api) return;
       try {
         const record = await api.get(id);
-        const { openCrudModal } = await import('./forms.js?v=20260626b');
+        const { openCrudModal } = await import('./forms.js?v=20260626e');
         openCrudModal(entity, record, refresh);
       } catch (e) { handleError(e); }
     };
   });
 
   if (view === 'calendario') {
-    const { bindCalendarEvents, refreshCalendarView } = await import('./calendar.js?v=20260626d');
+    const { bindCalendarEvents, refreshCalendarView } = await import('./calendar.js?v=20260626e');
     bindCalendarEvents((opts) => refreshCalendarView(App.profile, opts));
   }
 
@@ -165,6 +165,21 @@ async function bindViewEvents(view) {
         document.querySelectorAll('.client-panel').forEach(p => p.classList.add('hidden'));
         $(`#client-panel-${id}`)?.classList.remove('hidden');
       };
+    });
+
+    $$('[data-client-archive]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Remover cliente da lista? As senhas permanecem na aba Senhas Clientes.')) return;
+        try {
+          const { clientsApi } = await import('./api/crud.js?v=20260621a');
+          await clientsApi.update(btn.dataset.clientArchive, { status: 'inativo' });
+          showToast('Cliente removido. Senhas mantidas.', 'success');
+          navigate('clientes', { force: true, skipHistory: true });
+        } catch (err) {
+          handleError(err);
+        }
+      });
     });
   }
 
@@ -540,7 +555,7 @@ async function handleMarkAllNotifications() {
 async function handleNotificationClick(id, link) {
   try {
     const { markNotificationRead, parseNotificationLink } = await import('./services/notifications.js?v=20260619a');
-    const { prepareCalendarDeepLink } = await import('./calendar.js?v=20260626d');
+    const { prepareCalendarDeepLink } = await import('./calendar.js?v=20260626e');
     await markNotificationRead(id);
     closePanels();
     await loadNotifications();
@@ -593,20 +608,31 @@ function bindGlobalEvents() {
 
   $('#close-notifications').onclick = closePanels;
   $('#mark-all-notifications').onclick = handleMarkAllNotifications;
-  $('#close-detail-modal').onclick = closePanels;
-  $('#overlay').onclick = closePanels;
+  $('#close-detail-modal').onclick = () => {
+    import('./forms.js?v=20260626e').then(m => m.dismissCrudModal());
+  };
+  $('#overlay').onclick = () => {
+    import('./forms.js?v=20260626e').then(m => m.dismissCrudModal()).then(dismissed => {
+      if (!dismissed) closePanels();
+    });
+  };
 
   document.onkeydown = (e) => {
     if (e.key !== 'Escape') return;
-    import('./calendar.js?v=20260626d').then(m => {
-      if (m.CalendarState?.focusDay) m.closeCalendarDayFocus();
-      else closePanels();
+    import('./calendar.js?v=20260626e').then(m => {
+      if (m.CalendarState?.focusDay) {
+        m.closeCalendarDayFocus();
+        return;
+      }
+      import('./forms.js?v=20260626e').then(f => f.dismissCrudModal()).then(dismissed => {
+        if (!dismissed) closePanels();
+      });
     });
     return;
   };
 }
 
-function closePanels() {
+async function closePanels() {
   $$('.modal-overlay, .notifications-panel').forEach(el => el.classList.add('hidden'));
   $('#overlay').classList.add('hidden');
   $('#user-dropdown')?.classList.add('hidden');

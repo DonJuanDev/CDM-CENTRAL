@@ -320,6 +320,24 @@ function statusLabel(status) {
   return STATUS_LABELS[status] || status?.replace(/_/g, ' ') || '—';
 }
 
+function isItemCompleted(item) {
+  const done = new Set([
+    'concluida', 'cancelada', 'concluido', 'cancelado',
+    'pago', 'realizada', 'cancelada'
+  ]);
+  return done.has(item.status);
+}
+
+/** Tarefas pendentes/em andamento primeiro; concluídas/canceladas por último */
+function sortItemsForDisplay(items) {
+  return [...items].sort((a, b) => {
+    const aDone = isItemCompleted(a) ? 1 : 0;
+    const bDone = isItemCompleted(b) ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return String(a.sortKey || '').localeCompare(String(b.sortKey || ''));
+  });
+}
+
 function calItemAttrs(item) {
   const drag = canManageFlag ? 'draggable="true"' : '';
   const date = item.dateKey ? `data-cal-date="${item.dateKey}"` : '';
@@ -464,7 +482,7 @@ function renderStatusCard(item, variant = 'month') {
 }
 
 function renderMonthDayCell({ dateStr, dayNum, items, todayKey, extraClass = '' }) {
-  const dayItems = items.filter(i => i.dateKey === dateStr);
+  const dayItems = sortItemsForDisplay(items.filter(i => i.dateKey === dateStr));
   const isToday = todayKey === dateStr;
   const isFocused = CalendarState.focusDay === dateStr;
   const limit = isFocused ? dayItems.length : MAX_MONTH_CARDS;
@@ -549,7 +567,7 @@ function renderWeekView(items) {
     const isFocused = CalendarState.focusDay === key;
     const dayNum = day.getDate();
     const weekday = day.toLocaleDateString('pt-BR', { weekday: 'long' });
-    const dayItems = items.filter(it => it.dateKey === key);
+    const dayItems = sortItemsForDisplay(items.filter(it => it.dateKey === key));
     const limit = isFocused ? dayItems.length : MAX_WEEK_CARDS;
     const visible = dayItems.slice(0, limit);
     const extra = dayItems.length - visible.length;
@@ -579,7 +597,8 @@ function renderWeekView(items) {
 }
 
 function renderTableView(items) {
-  const rows = items.length ? items.map(item => {
+  const sorted = sortItemsForDisplay(items);
+  const rows = sorted.length ? sorted.map(item => {
     const meta = TYPE_META[item.type];
     return `<tr data-edit="${item.entity}" data-id="${item.id}" data-cal-item>
       <td class="cal-table-task">
@@ -625,7 +644,11 @@ function renderAgendaView(items) {
     });
     return `<div class="cal-agenda-day" data-cal-day data-date="${key}">
       <div class="cal-agenda-date">${dayLabel}</div>
-      ${grouped[key].map(item => {
+      ${grouped[key].sort((a, b) => {
+        const aDone = isItemCompleted(a) ? 1 : 0;
+        const bDone = isItemCompleted(b) ? 1 : 0;
+        return aDone - bDone;
+      }).map(item => {
         const meta = TYPE_META[item.type];
         return `<div class="cal-agenda-item ${ownerClass(item)}" ${calItemAttrs(item)}>
           <span class="cal-agenda-color ${ownerClass(item)}"></span>
@@ -799,7 +822,7 @@ async function openCalendarItemEditor(entity, id, onAction) {
   if (!api) return;
   try {
     const record = await api.get(id);
-    const { openCrudModal } = await import('./forms.js?v=20260626b');
+    const { openCrudModal } = await import('./forms.js?v=20260626e');
     openCrudModal(entity, record, onAction);
   } catch (err) {
     handleError(err);
@@ -988,7 +1011,7 @@ export function bindCalendarEvents(onRefresh) {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const date = btn.dataset.addDate;
-      import('./forms.js?v=20260619e').then(({ openCrudModal }) => {
+      import('./forms.js?v=20260626e').then(({ openCrudModal }) => {
         openCrudModal('tasks', { due_date: date }, () => refresh(true));
       });
     });
@@ -1050,7 +1073,7 @@ export function bindCalendarEvents(onRefresh) {
       if (!canManageFlag) return;
       e.stopPropagation();
       const date = day.dataset.date;
-      import('./forms.js?v=20260619e').then(({ openCrudModal }) => {
+      import('./forms.js?v=20260626e').then(({ openCrudModal }) => {
         openCrudModal('tasks', { due_date: date }, () => refresh(true));
       });
     });
