@@ -321,7 +321,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260622c');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260626d');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;

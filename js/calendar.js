@@ -794,6 +794,18 @@ function hideCalContextMenu() {
   $('#cal-context-menu')?.classList.add('hidden');
 }
 
+async function openCalendarItemEditor(entity, id, onAction) {
+  const api = CALENDAR_API[entity];
+  if (!api) return;
+  try {
+    const record = await api.get(id);
+    const { openCrudModal } = await import('./forms.js?v=20260626b');
+    openCrudModal(entity, record, onAction);
+  } catch (err) {
+    handleError(err);
+  }
+}
+
 function showCalContextMenu(x, y, { entity, id }, onAction) {
   const menu = ensureCalContextMenu();
   hideCalContextMenu();
@@ -807,13 +819,7 @@ function showCalContextMenu(x, y, { entity, id }, onAction) {
   menu.querySelector('[data-action="edit"]').onclick = async (e) => {
     e.stopPropagation();
     hideCalContextMenu();
-    const api = CALENDAR_API[entity];
-    if (!api) return;
-    try {
-      const record = await api.get(id);
-      const { openCrudModal } = await import('./forms.js?v=20260619e');
-      openCrudModal(entity, record, onAction);
-    } catch (err) { handleError(err); }
+    await openCalendarItemEditor(entity, id, onAction);
   };
 
   menu.querySelector('[data-action="delete"]').onclick = async (e) => {
@@ -871,6 +877,23 @@ function bindCalContextMenu(onRefresh) {
   document.addEventListener('click', dismiss);
   document.addEventListener('scroll', dismiss, true);
   document.addEventListener('keydown', dismiss);
+}
+
+function bindCalItemClick(onRefresh) {
+  const onAction = () => onRefresh({ reload: true });
+
+  document.querySelectorAll('[data-cal-item]').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      if (!canManageFlag) return;
+      if (CalendarState.blockItemClick) {
+        CalendarState.blockItemClick = false;
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      await openCalendarItemEditor(el.dataset.edit, el.dataset.id, onAction);
+    });
+  });
 }
 
 export async function refreshCalendarView(profile, { reload = false } = {}) {
@@ -1033,6 +1056,7 @@ export function bindCalendarEvents(onRefresh) {
     });
   });
 
+  bindCalItemClick(onRefresh);
   bindCalContextMenu(onRefresh);
   bindCalendarDragDrop(onRefresh);
 }

@@ -152,7 +152,7 @@ async function bindViewEvents(view) {
   });
 
   if (view === 'calendario') {
-    const { bindCalendarEvents, refreshCalendarView } = await import('./calendar.js?v=20260622c');
+    const { bindCalendarEvents, refreshCalendarView } = await import('./calendar.js?v=20260626d');
     bindCalendarEvents((opts) => refreshCalendarView(App.profile, opts));
   }
 
@@ -540,7 +540,7 @@ async function handleMarkAllNotifications() {
 async function handleNotificationClick(id, link) {
   try {
     const { markNotificationRead, parseNotificationLink } = await import('./services/notifications.js?v=20260619a');
-    const { prepareCalendarDeepLink } = await import('./calendar.js?v=20260622c');
+    const { prepareCalendarDeepLink } = await import('./calendar.js?v=20260626d');
     await markNotificationRead(id);
     closePanels();
     await loadNotifications();
@@ -598,7 +598,7 @@ function bindGlobalEvents() {
 
   document.onkeydown = (e) => {
     if (e.key !== 'Escape') return;
-    import('./calendar.js?v=20260622c').then(m => {
+    import('./calendar.js?v=20260626d').then(m => {
       if (m.CalendarState?.focusDay) m.closeCalendarDayFocus();
       else closePanels();
     });
