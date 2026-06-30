@@ -33,6 +33,7 @@ export function parseNotificationLink(link = '') {
   return {
     view,
     taskId: params.get('task'),
+    noteId: params.get('nota'),
     date: params.get('date'),
     hash: link.startsWith('#') ? link : `#${raw}`
   };

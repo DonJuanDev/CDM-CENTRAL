@@ -6,16 +6,12 @@ import {
   clientsApi, projectsApi, tasksApi, invoicesApi, paymentsApi,
   eventsApi, meetingsApi, notesApi, campaignsApi, filesApi,
   creativesApi, videosApi, notificationsApi, integrationsApi,
-  dailyPlansApi,
   getDashboardStats
-} from './api/crud.js?v=20260622a';
+} from './api/crud.js?v=20260627a';
 import { INTEGRATION_PROVIDERS, ROLE_LABELS, TEAM_MEMBERS, inferColorOwner, FILE_CLIENT_GROUPS, findClientGroupForName } from './config.js';
 import { canManage } from './auth.js';
 import { parseHashQuery } from './router.js';
 import { ensureClientFolders, fileMatchesFolder, findFolderBySlug } from './services/file-folders.js?v=20260621a';
-import {
-  toDateKey, formatDayLabel, formatFullDate, dayHasContent, buildDayList
-} from './daily-planning.js?v=20260622a';
 
 function metricCard(label, value, icon = '', color = 'purple') {
   return `<div class="metric-card">
@@ -36,6 +32,24 @@ function pageHeader(title, subtitle, actions = '') {
 function emptyState(msg = 'Nenhum registro encontrado') {
   return `<div class="empty-db"><div class="empty-state-icon">📭</div><div class="empty-state-title">${msg}</div>
     <p style="margin-top:8px;font-size:13px">Clique em "+ Novo" para adicionar</p></div>`;
+}
+
+function renderNoteCard(note, { showAuthor = false, showAssignee = false } = {}) {
+  const typeBadge = note.note_type === 'general'
+    ? '<span class="note-type-badge note-type-general">Geral</span>'
+    : '<span class="note-type-badge note-type-personal">Pessoal</span>';
+  return `<div class="note-card" data-edit="notes" data-id="${note.id}">
+    <div class="note-card-header">
+      <div class="note-card-title">${escapeHtml(note.title)}</div>
+      ${typeBadge}
+    </div>
+    <div class="note-card-content">${escapeHtml(note.content || '')}</div>
+    <div class="note-card-meta">
+      ${showAuthor && note.author?.full_name ? `<span class="note-meta-item">Por ${escapeHtml(note.author.full_name)}</span>` : ''}
+      ${showAssignee && note.assignee?.full_name ? `<span class="note-meta-item note-assignee">Responsável: ${escapeHtml(note.assignee.full_name)}</span>` : ''}
+      <span class="note-meta-item">${formatDateShort(note.created_at)}</span>
+    </div>
+  </div>`;
 }
 
 function normalizeFolderId(folderPath = '/') {
@@ -323,7 +337,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260626e');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260627a');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;
@@ -558,94 +572,40 @@ export const Views = {
   },
 
   async notas(profile) {
-    const notes = await notesApi.list({ order: { column: 'created_at' } });
-    return `
-      ${pageHeader('Notas', 'Documentação interna', '<button class="btn btn-primary" data-create="notes">+ Nova Nota</button>')}
-      <div class="grid grid-3">
-        ${notes.length ? notes.map(n => `
-          <div class="note-card" data-edit="notes" data-id="${n.id}">
-            <div class="note-card-title">${escapeHtml(n.title)}</div>
-            <div class="note-card-content">${escapeHtml(n.content || '')}</div>
-            <div class="note-tags">${(n.tags || []).map(t => `<span class="note-tag">${escapeHtml(t)}</span>`).join('')}</div>
-          </div>`).join('') : emptyState()}
-      </div>`;
-  },
-
-  async planejamento(profile) {
     const query = parseHashQuery();
-    const today = toDateKey(new Date());
-    const selectedDate = query.data && /^\d{4}-\d{2}-\d{2}$/.test(query.data) ? query.data : today;
+    const activeTab = query.tab === 'geral' ? 'geral' : 'pessoal';
 
-    const [plans, currentPlan] = await Promise.all([
-      dailyPlansApi.listForUser(profile.id, { daysBack: 60 }),
-      dailyPlansApi.getByDate(profile.id, selectedDate)
-    ]);
+    const notes = await notesApi.list({ order: { column: 'created_at', asc: false } });
+    const personalNotes = notes.filter(n => n.note_type === 'personal');
+    const generalNotes = notes.filter(n => n.note_type === 'general');
 
-    const plansByDate = Object.fromEntries(plans.map(p => [p.plan_date, p]));
-    if (currentPlan) plansByDate[selectedDate] = currentPlan;
+    const personalHtml = personalNotes.length
+      ? personalNotes.map(n => renderNoteCard(n)).join('')
+      : emptyState('Nenhuma nota pessoal');
 
-    const dayList = buildDayList(plansByDate, selectedDate);
-    const plan = currentPlan || { notes: '', items: [] };
-    const items = Array.isArray(plan.items) ? plan.items : [];
-
-    const dayButtons = dayList.map(dateKey => {
-      const hasContent = dayHasContent(plansByDate[dateKey]);
-      const active = dateKey === selectedDate;
-      const todayMark = dateKey === today ? ' is-today' : '';
-      return `<button type="button" class="daily-plan-day${active ? ' active' : ''}${hasContent ? ' has-content' : ''}${todayMark}"
-        data-plan-day="${dateKey}">
-        <span class="daily-plan-day-label">${escapeHtml(formatDayLabel(dateKey))}</span>
-        <span class="daily-plan-day-date">${escapeHtml(dateKey.split('-').reverse().slice(0, 2).join('/'))}</span>
-      </button>`;
-    }).join('');
-
-    const itemsHtml = items.length
-      ? items.map(item => `
-        <div class="daily-plan-item${item.done ? ' is-done' : ''}" data-item-id="${item.id}">
-          <label class="daily-plan-check">
-            <input type="checkbox" data-item-toggle="${item.id}" ${item.done ? 'checked' : ''}>
-            <span class="daily-plan-checkmark"></span>
-          </label>
-          <span class="daily-plan-item-text" contenteditable="true" data-item-text="${item.id}">${escapeHtml(item.text || '')}</span>
-          <button type="button" class="btn btn-ghost btn-sm daily-plan-item-delete" data-item-delete="${item.id}" title="Remover">×</button>
-        </div>`).join('')
-      : '<p class="daily-plan-empty">Nenhuma tarefa ainda. Adicione abaixo.</p>';
+    const generalHtml = generalNotes.length
+      ? generalNotes.map(n => renderNoteCard(n, { showAuthor: true, showAssignee: true })).join('')
+      : emptyState('Nenhuma nota geral');
 
     return `
-      ${pageHeader('Planejamento Diário', 'Suas tarefas e anotações por dia')}
-      <div class="daily-plan-layout">
-        <aside class="daily-plan-sidebar card">
-          <div class="daily-plan-sidebar-title">Dias</div>
-          <div class="daily-plan-days">${dayButtons}</div>
-        </aside>
-        <section class="daily-plan-main card" id="daily-plan-root" data-date="${selectedDate}">
-          <div class="daily-plan-toolbar">
-            <div class="daily-plan-toolbar-nav">
-              <button type="button" class="btn btn-ghost btn-sm" id="daily-plan-prev" title="Dia anterior">‹</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="daily-plan-today">Hoje</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="daily-plan-next" title="Próximo dia">›</button>
-            </div>
-            <input type="date" class="form-input daily-plan-date-input" id="daily-plan-date" value="${selectedDate}">
-            <span class="daily-plan-status" id="daily-plan-status"></span>
-          </div>
-          <h2 class="daily-plan-date-title">${escapeHtml(formatFullDate(selectedDate))}</h2>
-
-          <div class="daily-plan-section">
-            <div class="daily-plan-section-header">
-              <span class="daily-plan-section-title">Tarefas do dia</span>
-              <button type="button" class="btn btn-ghost btn-sm" id="daily-plan-add">+ Tarefa</button>
-            </div>
-            <div id="daily-plan-items" class="daily-plan-items">${itemsHtml}</div>
-            <div class="daily-plan-add-row">
-              <input type="text" class="form-input" id="daily-plan-add-input" placeholder="Nova tarefa... (Enter para adicionar)">
-            </div>
-          </div>
-
-          <div class="daily-plan-section">
-            <div class="daily-plan-section-title">Anotações</div>
-            <textarea class="form-input daily-plan-notes" id="daily-plan-notes" rows="6" placeholder="Observações, lembretes, ideias do dia...">${escapeHtml(plan.notes || '')}</textarea>
-          </div>
-        </section>
+      ${pageHeader('Notas', 'Pessoais só para você · Gerais para toda a equipe')}
+      <div class="tabs notion-tabs" id="notes-tabs">
+        <button class="tab${activeTab === 'pessoal' ? ' active' : ''}" data-notes-tab="pessoal">Notas Pessoais</button>
+        <button class="tab${activeTab === 'geral' ? ' active' : ''}" data-notes-tab="geral">Notas Gerais</button>
+      </div>
+      <div id="notes-panel-pessoal" class="notes-panel${activeTab === 'pessoal' ? '' : ' hidden'}">
+        <div class="notes-panel-toolbar">
+          <p class="notes-panel-desc">Somente você pode ver estas notas.</p>
+          <button class="btn btn-primary" data-create="notes" data-extra='{"note_type":"personal"}'>+ Nova Nota Pessoal</button>
+        </div>
+        <div class="grid grid-3">${personalHtml}</div>
+      </div>
+      <div id="notes-panel-geral" class="notes-panel${activeTab === 'geral' ? '' : ' hidden'}">
+        <div class="notes-panel-toolbar">
+          <p class="notes-panel-desc">Visível para toda a equipe. Atribua um responsável para acompanhar.</p>
+          <button class="btn btn-primary" data-create="notes" data-extra='{"note_type":"general"}'>+ Nova Nota Geral</button>
+        </div>
+        <div class="grid grid-3">${generalHtml}</div>
       </div>`;
   },
 
@@ -861,7 +821,6 @@ export const NAV_ITEMS = [
   { id: 'trafego', icon: navIcon('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'), label: 'Tráfego Pago', roles: ['admin','gestor','colaborador'] },
   { id: 'arquivos', icon: navIcon('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'), label: 'Arquivos', roles: ['admin','gestor','colaborador','cliente'] },
   { id: 'notas', icon: navIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'), label: 'Notas', roles: ['admin','gestor','colaborador'] },
-  { id: 'planejamento', icon: navIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M9 16l2 2 4-4"/>'), label: 'Planejamento Diário', roles: ['admin','gestor','colaborador'] },
   { id: 'integracoes', icon: navIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), label: 'Integrações', roles: ['admin','gestor'] },
   { id: 'configuracoes', icon: navIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'), label: 'Configurações', roles: ['admin','gestor','colaborador','cliente'] }
 ];

@@ -1,6 +1,6 @@
 import { requireAuth, signOut, canManage } from './auth.js';
 import { $, $$, showToast, handleError, escapeHtml } from './utils.js';
-import { readViewFromLocation, writeViewToLocation, writeViewHash, bindRouter } from './router.js';
+import { readViewFromLocation, writeViewToLocation, writeViewHash, parseHashQuery, bindRouter } from './router.js';
 import { ROLE_LABELS } from './config.js';
 
 const App = {
@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260626e');
+    viewsModulePromise = import('./views.js?v=20260627a');
   }
   return viewsModulePromise;
 }
@@ -126,7 +126,7 @@ async function bindViewEvents(view) {
       const entity = btn.dataset.create;
       let extra = {};
       try { extra = JSON.parse(btn.dataset.extra || '{}'); } catch {}
-      const { openCrudModal } = await import('./forms.js?v=20260626e');
+      const { openCrudModal } = await import('./forms.js?v=20260627a');
       openCrudModal(entity, Object.keys(extra).length ? extra : null, refresh);
     };
   });
@@ -145,7 +145,7 @@ async function bindViewEvents(view) {
       if (!api) return;
       try {
         const record = await api.get(id);
-        const { openCrudModal } = await import('./forms.js?v=20260626e');
+        const { openCrudModal } = await import('./forms.js?v=20260627a');
         openCrudModal(entity, record, refresh);
       } catch (e) { handleError(e); }
     };
@@ -190,10 +190,29 @@ async function bindViewEvents(view) {
     bindArquivosEvents({ refresh, canManageFolders });
   }
 
-  if (view === 'planejamento') {
-    const refresh = () => navigate('planejamento', { force: true, skipHistory: true });
-    const { bindDailyPlanningEvents } = await import('./daily-planning.js?v=20260622a');
-    bindDailyPlanningEvents({ profile: App.profile, refresh });
+  if (view === 'notas') {
+    document.querySelectorAll('[data-notes-tab]').forEach(tab => {
+      tab.onclick = () => {
+        const id = tab.dataset.notesTab;
+        document.querySelectorAll('[data-notes-tab]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelectorAll('.notes-panel').forEach(p => p.classList.add('hidden'));
+        $(`#notes-panel-${id}`)?.classList.remove('hidden');
+        writeViewHash('notas', { tab: id }, { replace: true });
+      };
+    });
+
+    const query = parseHashQuery();
+    if (query.nota) {
+      try {
+        const { notesApi } = await import('./api/crud.js?v=20260627a');
+        const record = await notesApi.get(query.nota);
+        const { openCrudModal } = await import('./forms.js?v=20260627a');
+        openCrudModal('notes', record, refresh);
+      } catch (e) {
+        handleError(e);
+      }
+    }
   }
 
   if (view === 'configuracoes') {

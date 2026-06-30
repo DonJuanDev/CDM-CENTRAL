@@ -67,7 +67,10 @@ export const eventsApi = createApi('calendar_events', '*, clients(company_name)'
 export const meetingsApi = createApi('meetings', '*, clients(company_name)');
 export const filesApi = createApi('files', '*, clients(company_name)');
 export const fileFoldersApi = createApi('file_folders');
-export const notesApi = createApi('notes');
+export const notesApi = createApi(
+  'notes',
+  '*, author:profiles!notes_author_id_fkey(id, full_name, email), assignee:profiles!notes_assigned_to_fkey(id, full_name, email)'
+);
 export const campaignsApi = createApi('campaigns', '*, clients(company_name)');
 export const creativesApi = createApi('creatives', '*, clients(company_name)');
 export const videosApi = createApi('videos', '*, clients(company_name)');

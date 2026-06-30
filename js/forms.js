@@ -126,9 +126,7 @@ const SCHEMAS = {
     title: 'Nota',
     fields: [
       { name: 'title', label: 'Título', type: 'text', required: true, full: true },
-      { name: 'content', label: 'Conteúdo', type: 'textarea', full: true },
-      { name: 'client_id', label: 'Cliente', type: 'client_select' },
-      { name: 'tags', label: 'Tags (vírgula)', type: 'text', full: true }
+      { name: 'content', label: 'Conteúdo', type: 'textarea', full: true }
     ]
   },
   campaigns: {
@@ -145,6 +143,20 @@ const SCHEMAS = {
     ]
   }
 };
+
+function getNotesSchema(noteType = 'personal') {
+  const fields = [
+    { name: 'title', label: 'Título', type: 'text', required: true, full: true },
+    { name: 'content', label: 'Conteúdo', type: 'textarea', full: true }
+  ];
+  if (noteType === 'general') {
+    fields.push({ name: 'assigned_to', label: 'Responsável (opcional)', type: 'user_select', full: true });
+  }
+  return {
+    title: noteType === 'general' ? 'Nota Geral' : 'Nota Pessoal',
+    fields
+  };
+}
 
 let clientsCache = [];
 let profilesCache = [];
@@ -212,9 +224,19 @@ async function buildCrudPayload(form, entity, schema, record, profile) {
     }
   }
 
+  if (entity === 'notes') {
+    const noteType = crudState?.noteType || record?.note_type || 'personal';
+    payload.note_type = noteType;
+    if (!record?.id) payload.author_id = profile?.id;
+    if (noteType === 'personal') {
+      payload.assigned_to = null;
+    } else if (!payload.assigned_to) {
+      payload.assigned_to = null;
+    }
+  }
+
   if (!record?.id) {
     payload.created_by = profile?.id;
-    if (entity === 'notes') payload.author_id = profile?.id;
   }
 
   return payload;
@@ -428,15 +450,26 @@ function renderField(field, value = '', record = null) {
 }
 
 export async function openCrudModal(entity, record = null, onSave) {
-  const schema = SCHEMAS[entity];
+  let schema = SCHEMAS[entity];
   if (!schema) return;
 
   await loadClientsCache();
+  const profile = await getProfile();
+
+  let noteType = null;
+  if (entity === 'notes') {
+    noteType = record?.note_type || 'personal';
+    if (!record?.id) {
+      record = { ...(record || {}), note_type: noteType, author_id: profile?.id };
+    }
+    if (noteType === 'general') await loadProfilesCache();
+    schema = getNotesSchema(noteType);
+  }
+
   if (entity === 'tasks') {
     teamProfilesForForm = await loadTeamWithProfiles();
   }
   const isEdit = !!record?.id;
-  const profile = await getProfile();
 
   const fieldsHtml = schema.fields.map(f => {
     let val = record?.[f.name] ?? '';
@@ -477,7 +510,7 @@ export async function openCrudModal(entity, record = null, onSave) {
   $('#detail-modal').classList.remove('hidden');
   $('#overlay').classList.remove('hidden');
 
-  crudState = { entity, record, onSave, schema, isEdit };
+  crudState = { entity, record, onSave, schema, isEdit, noteType };
   requestAnimationFrame(() => {
     const form = $('#crud-form');
     if (form) crudState.initialSnapshot = serializeCrudForm(form);
