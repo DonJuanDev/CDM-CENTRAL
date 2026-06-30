@@ -2,8 +2,10 @@ const DEFAULT_VIEW = 'dashboard';
 const STORAGE_KEY = 'cdm-last-view';
 
 export function resolveView(viewId, navItems) {
+  if (viewId === 'notas') viewId = 'notas-pessoais';
   if (viewId && navItems.some(n => n.id === viewId)) return viewId;
   const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'notas') return 'notas-pessoais';
   if (saved && navItems.some(n => n.id === saved)) return saved;
   return DEFAULT_VIEW;
 }

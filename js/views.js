@@ -34,10 +34,12 @@ function emptyState(msg = 'Nenhum registro encontrado') {
     <p style="margin-top:8px;font-size:13px">Clique em "+ Novo" para adicionar</p></div>`;
 }
 
-function renderNoteCard(note, { showAuthor = false, showAssignee = false } = {}) {
-  const typeBadge = note.note_type === 'general'
-    ? '<span class="note-type-badge note-type-general">Geral</span>'
-    : '<span class="note-type-badge note-type-personal">Pessoal</span>';
+function renderNoteCard(note, { showAuthor = false, showAssignee = false, hideTypeBadge = false } = {}) {
+  const typeBadge = hideTypeBadge ? '' : (
+    note.note_type === 'general'
+      ? '<span class="note-type-badge note-type-general">Geral</span>'
+      : '<span class="note-type-badge note-type-personal">Pessoal</span>'
+  );
   return `<div class="note-card" data-edit="notes" data-id="${note.id}">
     <div class="note-card-header">
       <div class="note-card-title">${escapeHtml(note.title)}</div>
@@ -337,7 +339,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260627a');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260627b');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;
@@ -571,42 +573,28 @@ export const Views = {
       </div>`;
   },
 
-  async notas(profile) {
-    const query = parseHashQuery();
-    const activeTab = query.tab === 'geral' ? 'geral' : 'pessoal';
-
+  async 'notas-pessoais'(profile) {
     const notes = await notesApi.list({ order: { column: 'created_at', asc: false } });
     const personalNotes = notes.filter(n => n.note_type === 'personal');
-    const generalNotes = notes.filter(n => n.note_type === 'general');
-
-    const personalHtml = personalNotes.length
-      ? personalNotes.map(n => renderNoteCard(n)).join('')
+    const cardsHtml = personalNotes.length
+      ? personalNotes.map(n => renderNoteCard(n, { hideTypeBadge: true })).join('')
       : emptyState('Nenhuma nota pessoal');
 
-    const generalHtml = generalNotes.length
-      ? generalNotes.map(n => renderNoteCard(n, { showAuthor: true, showAssignee: true })).join('')
+    return `
+      ${pageHeader('Notas Pessoais', 'Somente você pode ver estas notas', '<button class="btn btn-primary" data-create="notes" data-extra=\'{"note_type":"personal"}\'>+ Nova Nota</button>')}
+      <div class="grid grid-3">${cardsHtml}</div>`;
+  },
+
+  async 'notas-gerais'(profile) {
+    const notes = await notesApi.list({ order: { column: 'created_at', asc: false } });
+    const generalNotes = notes.filter(n => n.note_type === 'general');
+    const cardsHtml = generalNotes.length
+      ? generalNotes.map(n => renderNoteCard(n, { showAuthor: true, showAssignee: true, hideTypeBadge: true })).join('')
       : emptyState('Nenhuma nota geral');
 
     return `
-      ${pageHeader('Notas', 'Pessoais só para você · Gerais para toda a equipe')}
-      <div class="tabs notion-tabs" id="notes-tabs">
-        <button class="tab${activeTab === 'pessoal' ? ' active' : ''}" data-notes-tab="pessoal">Notas Pessoais</button>
-        <button class="tab${activeTab === 'geral' ? ' active' : ''}" data-notes-tab="geral">Notas Gerais</button>
-      </div>
-      <div id="notes-panel-pessoal" class="notes-panel${activeTab === 'pessoal' ? '' : ' hidden'}">
-        <div class="notes-panel-toolbar">
-          <p class="notes-panel-desc">Somente você pode ver estas notas.</p>
-          <button class="btn btn-primary" data-create="notes" data-extra='{"note_type":"personal"}'>+ Nova Nota Pessoal</button>
-        </div>
-        <div class="grid grid-3">${personalHtml}</div>
-      </div>
-      <div id="notes-panel-geral" class="notes-panel${activeTab === 'geral' ? '' : ' hidden'}">
-        <div class="notes-panel-toolbar">
-          <p class="notes-panel-desc">Visível para toda a equipe. Atribua um responsável para acompanhar.</p>
-          <button class="btn btn-primary" data-create="notes" data-extra='{"note_type":"general"}'>+ Nova Nota Geral</button>
-        </div>
-        <div class="grid grid-3">${generalHtml}</div>
-      </div>`;
+      ${pageHeader('Notas Gerais', 'Visível para toda a equipe · Atribua um responsável', '<button class="btn btn-primary" data-create="notes" data-extra=\'{"note_type":"general"}\'>+ Nova Nota</button>')}
+      <div class="grid grid-3">${cardsHtml}</div>`;
   },
 
   async producao(profile) {
@@ -820,7 +808,8 @@ export const NAV_ITEMS = [
   { id: 'calendario', icon: navIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'), label: 'Calendário de Conteúdos', roles: ['admin','gestor','colaborador','cliente'] },
   { id: 'trafego', icon: navIcon('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'), label: 'Tráfego Pago', roles: ['admin','gestor','colaborador'] },
   { id: 'arquivos', icon: navIcon('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'), label: 'Arquivos', roles: ['admin','gestor','colaborador','cliente'] },
-  { id: 'notas', icon: navIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'), label: 'Notas', roles: ['admin','gestor','colaborador'] },
+  { id: 'notas-pessoais', icon: navIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'), label: 'Notas Pessoais', roles: ['admin','gestor','colaborador'] },
+  { id: 'notas-gerais', icon: navIcon('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>'), label: 'Notas Gerais', roles: ['admin','gestor','colaborador'] },
   { id: 'integracoes', icon: navIcon('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'), label: 'Integrações', roles: ['admin','gestor'] },
   { id: 'configuracoes', icon: navIcon('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'), label: 'Configurações', roles: ['admin','gestor','colaborador','cliente'] }
 ];

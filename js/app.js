@@ -15,7 +15,7 @@ let viewsModulePromise = null;
 
 function loadViewsModule() {
   if (!viewsModulePromise) {
-    viewsModulePromise = import('./views.js?v=20260627a');
+    viewsModulePromise = import('./views.js?v=20260627b');
   }
   return viewsModulePromise;
 }
@@ -78,6 +78,7 @@ export async function navigate(view, opts = {}) {
   const { replace = false, skipHistory = false, force = false } = opts;
 
   await ensureViews();
+  if (view === 'notas') view = 'notas-pessoais';
   if (!App.NAV_ITEMS.some(n => n.id === view)) view = 'dashboard';
 
   const viewHash = window.location.hash;
@@ -126,7 +127,7 @@ async function bindViewEvents(view) {
       const entity = btn.dataset.create;
       let extra = {};
       try { extra = JSON.parse(btn.dataset.extra || '{}'); } catch {}
-      const { openCrudModal } = await import('./forms.js?v=20260627a');
+      const { openCrudModal } = await import('./forms.js?v=20260627b');
       openCrudModal(entity, Object.keys(extra).length ? extra : null, refresh);
     };
   });
@@ -145,7 +146,7 @@ async function bindViewEvents(view) {
       if (!api) return;
       try {
         const record = await api.get(id);
-        const { openCrudModal } = await import('./forms.js?v=20260627a');
+        const { openCrudModal } = await import('./forms.js?v=20260627b');
         openCrudModal(entity, record, refresh);
       } catch (e) { handleError(e); }
     };
@@ -190,24 +191,13 @@ async function bindViewEvents(view) {
     bindArquivosEvents({ refresh, canManageFolders });
   }
 
-  if (view === 'notas') {
-    document.querySelectorAll('[data-notes-tab]').forEach(tab => {
-      tab.onclick = () => {
-        const id = tab.dataset.notesTab;
-        document.querySelectorAll('[data-notes-tab]').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        document.querySelectorAll('.notes-panel').forEach(p => p.classList.add('hidden'));
-        $(`#notes-panel-${id}`)?.classList.remove('hidden');
-        writeViewHash('notas', { tab: id }, { replace: true });
-      };
-    });
-
+  if (view === 'notas-pessoais' || view === 'notas-gerais') {
     const query = parseHashQuery();
     if (query.nota) {
       try {
-        const { notesApi } = await import('./api/crud.js?v=20260627a');
+        const { notesApi } = await import('./api/crud.js?v=20260627b');
         const record = await notesApi.get(query.nota);
-        const { openCrudModal } = await import('./forms.js?v=20260627a');
+        const { openCrudModal } = await import('./forms.js?v=20260627b');
         openCrudModal('notes', record, refresh);
       } catch (e) {
         handleError(e);

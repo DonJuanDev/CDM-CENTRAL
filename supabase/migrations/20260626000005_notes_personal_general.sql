@@ -77,7 +77,7 @@ BEGIN
     COALESCE(v_actor, 'Equipe CDM') || ' atribuiu você a uma nota',
     NEW.title,
     'info',
-    '#/notas?nota=' || NEW.id::text,
+    '#/notas-gerais?nota=' || NEW.id::text,
     'notes',
     NEW.id
   );
