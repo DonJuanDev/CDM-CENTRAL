@@ -822,7 +822,7 @@ async function openCalendarItemEditor(entity, id, onAction) {
   if (!api) return;
   try {
     const record = await api.get(id);
-    const { openCrudModal } = await import('./forms.js?v=20260626e');
+    const { openCrudModal } = await import('./forms.js?v=20260628a');
     openCrudModal(entity, record, onAction);
   } catch (err) {
     handleError(err);
@@ -1011,7 +1011,7 @@ export function bindCalendarEvents(onRefresh) {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const date = btn.dataset.addDate;
-      import('./forms.js?v=20260626e').then(({ openCrudModal }) => {
+      import('./forms.js?v=20260628a').then(({ openCrudModal }) => {
         openCrudModal('tasks', { due_date: date }, () => refresh(true));
       });
     });
@@ -1073,7 +1073,7 @@ export function bindCalendarEvents(onRefresh) {
       if (!canManageFlag) return;
       e.stopPropagation();
       const date = day.dataset.date;
-      import('./forms.js?v=20260626e').then(({ openCrudModal }) => {
+      import('./forms.js?v=20260628a').then(({ openCrudModal }) => {
         openCrudModal('tasks', { due_date: date }, () => refresh(true));
       });
     });

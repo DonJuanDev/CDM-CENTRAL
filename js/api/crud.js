@@ -60,7 +60,7 @@ export function createApi(table, defaultSelect = '*') {
 
 export const clientsApi = createApi('clients');
 export const projectsApi = createApi('projects', '*, clients(company_name)');
-export const tasksApi = createApi('tasks', 'id, title, due_date, status, priority, client_id, client_names, assignee_name, color_owner, assigned_to, created_by, column_name, clients(company_name, icon), projects(name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)');
+export const tasksApi = createApi('tasks', 'id, title, description, due_date, status, priority, client_id, client_names, assignee_name, color_owner, assigned_to, created_by, column_name, clients(company_name, icon), projects(name), assignee:profiles!tasks_assigned_to_fkey(full_name, email)');
 export const invoicesApi = createApi('invoices', '*, clients(company_name)');
 export const paymentsApi = createApi('payments', '*, clients(company_name)');
 export const eventsApi = createApi('calendar_events', '*, clients(company_name)');

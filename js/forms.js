@@ -209,15 +209,22 @@ async function buildCrudPayload(form, entity, schema, record, profile) {
 
     const checkedMembers = [...form.querySelectorAll('input[name="team_member_names"]:checked')];
     if (!checkedMembers.length) {
-      throw new Error('SELECT_TEAM_REQUIRED');
+      if (record?.id) {
+        payload.assignee_name = record.assignee_name ?? null;
+        payload.assigned_to = record.assigned_to ?? null;
+        payload.color_owner = record.color_owner ?? null;
+      } else {
+        throw new Error('SELECT_TEAM_REQUIRED');
+      }
+    } else {
+      const memberNames = checkedMembers.map(el => el.value);
+      payload.assignee_name = memberNames.join(', ');
+      payload.assigned_to = checkedMembers[0]?.dataset?.profileId || null;
+      const colors = memberNames
+        .map(name => findTeamMemberByName(name)?.color || inferColorOwner(name, payload.title || ''))
+        .filter(Boolean);
+      payload.color_owner = colors[0] || null;
     }
-    const memberNames = checkedMembers.map(el => el.value);
-    payload.assignee_name = memberNames.join(', ');
-    payload.assigned_to = checkedMembers[0]?.dataset?.profileId || null;
-    const colors = memberNames
-      .map(name => findTeamMemberByName(name)?.color || inferColorOwner(name, payload.title || ''))
-      .filter(Boolean);
-    payload.color_owner = colors[0] || null;
 
     if (payload.status) {
       payload.column_name = STATUS_TO_COLUMN[payload.status] || 'a_fazer';
@@ -298,7 +305,8 @@ export async function dismissCrudModal() {
 
   const shouldAutoSave = crudState?.isEdit && crudState?.entity === 'tasks';
   if (shouldAutoSave && isCrudFormDirty()) {
-    await saveCrudForm({ silent: true });
+    const ok = await saveCrudForm({ silent: false });
+    if (!ok) return true;
   }
 
   closeCrudModal();
