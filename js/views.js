@@ -7,7 +7,7 @@ import {
   eventsApi, meetingsApi, notesApi, campaignsApi, filesApi,
   creativesApi, videosApi, notificationsApi, integrationsApi,
   getDashboardStats
-} from './api/crud.js?v=20260627a';
+} from './api/crud.js?v=20260703a';
 import { INTEGRATION_PROVIDERS, ROLE_LABELS, TEAM_MEMBERS, inferColorOwner, FILE_CLIENT_GROUPS, findClientGroupForName } from './config.js';
 import { canManage } from './auth.js';
 import { parseHashQuery } from './router.js';
@@ -339,7 +339,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260628a');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260703a');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;

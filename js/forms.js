@@ -3,7 +3,7 @@ import {
   clientsApi, projectsApi, tasksApi, invoicesApi, paymentsApi,
   eventsApi, meetingsApi, notesApi, campaignsApi, filesApi, integrationsApi,
   profilesApi
-} from './api/crud.js?v=20260621a';
+} from './api/crud.js?v=20260703a';
 import { uploadFile, uploadInvoicePdf, linkDriveFile } from './services/storage.js?v=20260621a';
 import { showUploadProgress, hideUploadProgress } from './files-browser.js?v=20260621a';
 import { getProfile } from './auth.js';
@@ -202,10 +202,19 @@ async function buildCrudPayload(form, entity, schema, record, profile) {
     const selectedClients = checkedIds
       .map(id => clientsCache.find(c => c.id === id))
       .filter(Boolean);
-    payload.client_id = selectedClients[0]?.id || null;
-    payload.client_names = selectedClients.length
-      ? selectedClients.map(formatClientLabel).join(', ')
-      : null;
+
+    if (selectedClients.length) {
+      payload.client_id = selectedClients[0]?.id || null;
+      payload.client_names = selectedClients.map(formatClientLabel).join(', ');
+    } else if (record?.id) {
+      payload.client_id = record.client_id ?? null;
+      payload.client_names = record.client_names ?? null;
+    } else {
+      payload.client_id = null;
+      payload.client_names = null;
+    }
+
+    payload.description = fd.get('description') != null ? String(fd.get('description')) : (record?.description ?? '');
 
     const checkedMembers = [...form.querySelectorAll('input[name="team_member_names"]:checked')];
     if (!checkedMembers.length) {
@@ -219,15 +228,19 @@ async function buildCrudPayload(form, entity, schema, record, profile) {
     } else {
       const memberNames = checkedMembers.map(el => el.value);
       payload.assignee_name = memberNames.join(', ');
-      payload.assigned_to = checkedMembers[0]?.dataset?.profileId || null;
+      const profileId = checkedMembers[0]?.dataset?.profileId;
+      payload.assigned_to = profileId || (record?.id ? record.assigned_to : null) || null;
       const colors = memberNames
         .map(name => findTeamMemberByName(name)?.color || inferColorOwner(name, payload.title || ''))
         .filter(Boolean);
-      payload.color_owner = colors[0] || null;
+      payload.color_owner = colors[0] || record?.color_owner || null;
     }
 
     if (payload.status) {
-      payload.column_name = STATUS_TO_COLUMN[payload.status] || 'a_fazer';
+      payload.column_name = STATUS_TO_COLUMN[payload.status] || record?.column_name || 'a_fazer';
+    } else if (record?.id) {
+      payload.status = record.status;
+      payload.column_name = record.column_name ?? STATUS_TO_COLUMN[record.status] ?? 'a_fazer';
     }
   }
 
@@ -289,7 +302,12 @@ async function saveCrudForm({ silent = false } = {}) {
     if (!silent) {
       showToast(`${schema.title} ${isEdit ? 'atualizado' : 'criado'} com sucesso`, 'success');
     }
-    if (entity === 'tasks') invalidatePrefix('calendar:');
+    if (entity === 'tasks') {
+      invalidatePrefix('calendar:');
+      invalidatePrefix('list:tasks');
+      if (saved?.id) invalidatePrefix(`get:tasks:${saved.id}`);
+      else if (record?.id) invalidatePrefix(`get:tasks:${record.id}`);
+    }
     crudState.initialSnapshot = serializeCrudForm(form);
     onSave?.();
     return true;

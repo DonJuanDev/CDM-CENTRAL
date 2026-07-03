@@ -6,7 +6,8 @@ import {
 import { inferColorOwner, OWNER_COLORS, OWNER_HEX, resolveAssigneeColorKeys, parseAssigneeNames } from './config.js';
 import {
   tasksApi, eventsApi, meetingsApi, invoicesApi, clientsApi
-} from './api/crud.js?v=20260620c';
+} from './api/crud.js?v=20260703a';
+import { openCrudModal } from './forms.js?v=20260703a';
 import { canManage } from './auth.js';
 import { cached, invalidatePrefix } from './cache.js';
 
@@ -123,6 +124,12 @@ function resolveTaskColorOwner(t) {
   return inferred && OWNER_COLORS[inferred] ? inferred : 'default';
 }
 
+function truncateText(text, max = 90) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
+}
+
 function normalizeTask(t) {
   const clientLabel = t.client_names || (t.clients ? `${t.clients.icon || ''} ${t.clients.company_name}`.trim() : '');
   return {
@@ -130,6 +137,7 @@ function normalizeTask(t) {
     entity: 'tasks',
     type: 'task',
     title: t.title,
+    description: t.description || '',
     dateKey: toDateKey(t.due_date),
     datetime: t.due_date ? `${t.due_date}T09:00:00` : null,
     allDay: true,
@@ -473,10 +481,14 @@ function renderStatusCard(item, variant = 'month') {
     ? `<div class="cal-status-card-client">${escapeHtml(clientLabel)}</div>`
     : '';
   const assigneesHtml = renderStatusCardAssignees(item);
+  const descHtml = item.description
+    ? `<div class="cal-status-card-desc">${escapeHtml(truncateText(item.description, variant === 'week' ? 120 : 80))}</div>`
+    : '';
 
   return `<div class="cal-status-card ${statusCls}${variantCls}" ${attrs}>
     ${clientHtml}
     <div class="cal-status-card-title">${typeIcon}${escapeHtml(item.title)}</div>
+    ${descHtml}
     ${assigneesHtml}
   </div>`;
 }
@@ -604,7 +616,10 @@ function renderTableView(items) {
       <td class="cal-table-task">
         <span class="cal-owner-dot ${ownerClass(item)}"></span>
         <span class="cal-table-icon">${meta.icon}</span>
-        <span class="cal-table-title">${escapeHtml(item.title)}</span>
+        <span class="cal-table-text">
+          <span class="cal-table-title">${escapeHtml(item.title)}</span>
+          ${item.description ? `<span class="cal-table-desc">${escapeHtml(truncateText(item.description, 100))}</span>` : ''}
+        </span>
       </td>
       <td>${escapeHtml(item.client || '—')}</td>
       <td>${item.priority && item.priority !== 'media' ? priorityBadge(item.priority) : '—'}</td>
@@ -655,6 +670,7 @@ function renderAgendaView(items) {
           <span class="cal-agenda-time">${item.allDay ? 'Dia inteiro' : formatDateTime(item.datetime).split(',')[1]?.trim() || '—'}</span>
           <div class="cal-agenda-body">
             <div class="cal-agenda-title">${meta.icon} ${escapeHtml(item.title)}</div>
+            ${item.description ? `<div class="cal-agenda-desc">${escapeHtml(truncateText(item.description, 140))}</div>` : ''}
             <div class="cal-agenda-meta">
               ${renderOwnerBadge(item)}
               ${item.client ? `<span>${escapeHtml(item.client)}</span>` : ''}
@@ -822,7 +838,6 @@ async function openCalendarItemEditor(entity, id, onAction) {
   if (!api) return;
   try {
     const record = await api.get(id);
-    const { openCrudModal } = await import('./forms.js?v=20260628a');
     openCrudModal(entity, record, onAction);
   } catch (err) {
     handleError(err);
@@ -1011,9 +1026,7 @@ export function bindCalendarEvents(onRefresh) {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const date = btn.dataset.addDate;
-      import('./forms.js?v=20260628a').then(({ openCrudModal }) => {
-        openCrudModal('tasks', { due_date: date }, () => refresh(true));
-      });
+      openCrudModal('tasks', { due_date: date }, () => refresh(true));
     });
   });
 
@@ -1073,9 +1086,7 @@ export function bindCalendarEvents(onRefresh) {
       if (!canManageFlag) return;
       e.stopPropagation();
       const date = day.dataset.date;
-      import('./forms.js?v=20260628a').then(({ openCrudModal }) => {
-        openCrudModal('tasks', { due_date: date }, () => refresh(true));
-      });
+      openCrudModal('tasks', { due_date: date }, () => refresh(true));
     });
   });
 
