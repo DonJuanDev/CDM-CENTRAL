@@ -2,9 +2,9 @@ import { requireAuth, signOut, canManage } from './auth.js';
 import { $, $$, showToast, handleError, escapeHtml } from './utils.js';
 import { readViewFromLocation, writeViewToLocation, writeViewHash, parseHashQuery, bindRouter } from './router.js';
 import { ROLE_LABELS } from './config.js';
-import { dismissCrudModal, openCrudModal } from './forms.js?v=20260703a';
+import { dismissCrudModal, openCrudModal } from './forms.js?v=20260813b';
 
-const BUILD = '20260703a';
+const BUILD = '20260813b';
 
 const App = {
   profile: null,
@@ -193,6 +193,21 @@ async function bindViewEvents(view) {
   }
 
   if (view === 'notas-pessoais' || view === 'notas-gerais') {
+    $$('[data-note-complete]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const { notesApi } = await import(`./api/crud.js?v=${BUILD}`);
+          const done = btn.dataset.completed === '1';
+          await notesApi.update(btn.dataset.noteComplete, { is_completed: !done });
+          showToast(done ? 'Nota reaberta' : 'Nota concluída', 'success');
+          navigate(view, { force: true, skipHistory: true });
+        } catch (err) {
+          handleError(err);
+        }
+      });
+    });
+
     const query = parseHashQuery();
     if (query.nota) {
       try {

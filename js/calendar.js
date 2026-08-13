@@ -7,7 +7,7 @@ import { inferColorOwner, OWNER_COLORS, OWNER_HEX, resolveAssigneeColorKeys, par
 import {
   tasksApi, eventsApi, meetingsApi, invoicesApi, clientsApi
 } from './api/crud.js?v=20260703a';
-import { openCrudModal } from './forms.js?v=20260703a';
+import { openCrudModal } from './forms.js?v=20260813b';
 import { canManage } from './auth.js';
 import { cached, invalidatePrefix } from './cache.js';
 
@@ -26,10 +26,28 @@ const STATUS_LABELS = {
   cancelada: 'Cancelado'
 };
 
+const MAX_CLIENT_FILTERS = 5;
+
+function loadClientFilters() {
+  try {
+    const raw = localStorage.getItem('cdm-cal-clients');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(Boolean).slice(0, MAX_CLIENT_FILTERS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClientFilters(ids) {
+  CalendarState.clientFilters = ids.slice(0, MAX_CLIENT_FILTERS);
+  localStorage.setItem('cdm-cal-clients', JSON.stringify(CalendarState.clientFilters));
+}
+
 export const CalendarState = {
   date: new Date(),
   view: localStorage.getItem('cdm-cal-view') || 'semana',
-  clientFilter: '',
+  clientFilters: loadClientFilters(),
   typeFilter: 'all',
   statusFilter: '',
   focusDay: null,
@@ -236,10 +254,23 @@ export async function fetchCalendarItems(profile, { reload = false } = {}) {
   }, 90_000);
 }
 
+function itemMatchesClientFilters(item) {
+  const ids = CalendarState.clientFilters || [];
+  if (!ids.length) return true;
+  if (item.clientId && ids.includes(item.clientId)) return true;
+  const blob = (item.client || '').toLowerCase();
+  if (!blob) return false;
+  const clients = CalendarState._clients || [];
+  return ids.some(id => {
+    const client = clients.find(c => c.id === id);
+    return client && blob.includes(client.company_name.toLowerCase());
+  });
+}
+
 function filterItems(items) {
   return items.filter(item => {
     if (CalendarState.typeFilter !== 'all' && item.type !== CalendarState.typeFilter) return false;
-    if (CalendarState.clientFilter && item.clientId !== CalendarState.clientFilter) return false;
+    if (!itemMatchesClientFilters(item)) return false;
     if (CalendarState.statusFilter && item.status !== CalendarState.statusFilter) return false;
     if (CalendarState.ownerFilter !== 'all' && !getOwnerColorKeys(item).includes(CalendarState.ownerFilter)) return false;
     return true;
@@ -477,19 +508,13 @@ function renderStatusCard(item, variant = 'month') {
   const variantCls = variant === 'week' ? ' cal-status-card--week' : ' cal-status-card--month';
   const clientLabel = stripClientLabel(item.client || '');
   const typeIcon = item.type !== 'task' ? `${TYPE_META[item.type]?.icon || ''} ` : '';
-  const clientHtml = clientLabel
-    ? `<div class="cal-status-card-client">${escapeHtml(clientLabel)}</div>`
-    : '';
-  const assigneesHtml = renderStatusCardAssignees(item);
-  const descHtml = item.description
-    ? `<div class="cal-status-card-desc">${escapeHtml(truncateText(item.description, variant === 'week' ? 120 : 80))}</div>`
-    : '';
+  const maxDesc = variant === 'week' ? 90 : 60;
 
   return `<div class="cal-status-card ${statusCls}${variantCls}" ${attrs}>
-    ${clientHtml}
+    <div class="cal-status-card-client">${escapeHtml(clientLabel)}</div>
     <div class="cal-status-card-title">${typeIcon}${escapeHtml(item.title)}</div>
-    ${descHtml}
-    ${assigneesHtml}
+    <div class="cal-status-card-desc">${escapeHtml(truncateText(item.description, maxDesc))}</div>
+    ${renderStatusCardAssignees(item) || '<div class="cal-status-card-assignees"></div>'}
   </div>`;
 }
 
@@ -706,10 +731,40 @@ function renderFilters(clients) {
         return `<button class="cal-filter-chip cal-owner-chip ${CalendarState.ownerFilter === k ? 'active' : ''}" data-cal-owner="${k}">${dot}${label}</button>`;
       }).join('')}
     </div>
-    <select class="form-input cal-filter-select" id="cal-client-filter">
-      <option value="">Todos os clientes</option>
-      ${clients.map(c => `<option value="${c.id}" ${CalendarState.clientFilter === c.id ? 'selected' : ''}>${escapeHtml(c.company_name)}</option>`).join('')}
-    </select>
+    ${renderClientMultiFilter(clients)}
+  </div>`;
+}
+
+function renderClientMultiFilter(clients) {
+  const selected = CalendarState.clientFilters || [];
+  const activeClients = (clients || []).filter(c => c.status !== 'inativo');
+  const selectedSet = new Set(selected);
+  const selectedNames = activeClients.filter(c => selectedSet.has(c.id)).map(c => c.company_name);
+  const atLimit = selected.length >= MAX_CLIENT_FILTERS;
+
+  let summary = 'Todos os clientes';
+  if (selectedNames.length === 1) summary = selectedNames[0];
+  else if (selectedNames.length > 1) summary = `${selectedNames.length} clientes`;
+
+  const options = activeClients.map(c => {
+    const checked = selectedSet.has(c.id);
+    const disabled = !checked && atLimit ? 'disabled' : '';
+    return `<label class="cal-client-option ${disabled ? 'is-disabled' : ''}">
+      <input type="checkbox" value="${c.id}" ${checked ? 'checked' : ''} ${disabled}>
+      <span>${escapeHtml(c.company_name)}</span>
+    </label>`;
+  }).join('');
+
+  return `<div class="cal-client-multi" id="cal-client-multi">
+    <button type="button" class="form-input cal-client-multi-toggle" id="cal-client-toggle" aria-expanded="false">
+      <span class="cal-client-multi-label">${escapeHtml(summary)}</span>
+      <span class="cal-client-multi-caret">▾</span>
+    </button>
+    <div class="cal-client-multi-panel hidden" id="cal-client-panel">
+      <div class="cal-client-multi-hint">Até ${MAX_CLIENT_FILTERS} clientes para planejar juntos</div>
+      <div class="cal-client-multi-list">${options || '<span class="cal-client-multi-empty">Nenhum cliente</span>'}</div>
+      ${selected.length ? '<button type="button" class="btn btn-ghost btn-sm" id="cal-client-clear">Limpar seleção</button>' : ''}
+    </div>
   </div>`;
 }
 
@@ -1017,10 +1072,61 @@ export function bindCalendarEvents(onRefresh) {
     });
   });
 
-  $('#cal-client-filter')?.addEventListener('change', (e) => {
-    CalendarState.clientFilter = e.target.value;
+  $('#cal-client-toggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = $('#cal-client-panel');
+    const toggle = $('#cal-client-toggle');
+    if (!panel) return;
+    const open = panel.classList.toggle('hidden') === false;
+    toggle?.setAttribute('aria-expanded', String(open));
+  });
+
+  $('#cal-client-panel')?.addEventListener('click', (e) => e.stopPropagation());
+
+  document.querySelectorAll('#cal-client-panel input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const current = [...(CalendarState.clientFilters || [])];
+      if (cb.checked) {
+        if (current.length >= MAX_CLIENT_FILTERS) {
+          cb.checked = false;
+          showToast(`Selecione no máximo ${MAX_CLIENT_FILTERS} clientes`, 'error');
+          return;
+        }
+        if (!current.includes(cb.value)) current.push(cb.value);
+      } else {
+        const idx = current.indexOf(cb.value);
+        if (idx >= 0) current.splice(idx, 1);
+      }
+      saveClientFilters(current);
+      CalendarState._keepClientPanelOpen = true;
+      refresh(false);
+    });
+  });
+
+  $('#cal-client-clear')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    saveClientFilters([]);
+    CalendarState._keepClientPanelOpen = true;
     refresh(false);
   });
+
+  if (CalendarState._clientPanelCloser) {
+    document.removeEventListener('click', CalendarState._clientPanelCloser);
+  }
+  CalendarState._clientPanelCloser = (e) => {
+    if (e.target.closest('#cal-client-multi')) return;
+    $('#cal-client-panel')?.classList.add('hidden');
+    $('#cal-client-toggle')?.setAttribute('aria-expanded', 'false');
+  };
+  document.addEventListener('click', CalendarState._clientPanelCloser);
+
+  if (CalendarState._keepClientPanelOpen) {
+    CalendarState._keepClientPanelOpen = false;
+    setTimeout(() => {
+      $('#cal-client-panel')?.classList.remove('hidden');
+      $('#cal-client-toggle')?.setAttribute('aria-expanded', 'true');
+    }, 0);
+  }
 
   document.querySelectorAll('[data-add-date]').forEach(btn => {
     btn.addEventListener('click', (e) => {

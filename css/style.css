@@ -1006,9 +1006,93 @@ tbody tr:hover { background: var(--bg-card-hover); }
   font-size: 13px;
 }
 
+.cal-client-multi {
+  position: relative;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.cal-client-multi-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  max-width: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cal-client-multi-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-client-multi-caret {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.cal-client-multi-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 280px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,0.18));
+  padding: 8px;
+}
+
+.cal-client-multi-panel.hidden { display: none; }
+
+.cal-client-multi-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 4px 8px 8px;
+}
+
+.cal-client-multi-list {
+  overflow-y: auto;
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cal-client-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cal-client-option:hover { background: var(--bg-card-hover); }
+.cal-client-option.is-disabled { opacity: 0.45; cursor: not-allowed; }
+.cal-client-option input { margin: 0; }
+.cal-client-multi-empty { font-size: 13px; color: var(--text-tertiary); padding: 8px; }
+#cal-client-clear { margin-top: 6px; align-self: flex-start; }
+
 .notion-calendar .calendar-day {
-  min-height: 130px;
+  min-height: 268px;
+  height: 268px;
   vertical-align: top;
+  overflow: hidden;
+}
+
+.notion-calendar.has-day-focus .calendar-day.is-focused {
+  overflow-y: auto;
 }
 
 .calendar-day-header-row {
@@ -1190,10 +1274,12 @@ tbody tr:hover { background: var(--bg-card-hover); }
 
 @media (max-width: 768px) {
   .notion-calendar { font-size: 11px; }
-  .notion-calendar .calendar-day { min-height: 80px; padding: 4px; }
+  .notion-calendar .calendar-day { min-height: 220px; height: 220px; padding: 4px; }
   .notion-week-cols { grid-template-columns: 1fr; }
   .notion-week-headers { grid-template-columns: 1fr; }
   .cal-filter-select { max-width: 100%; }
+  .cal-client-multi { max-width: 100%; min-width: 0; width: 100%; }
+  .cal-client-multi-panel { width: 100%; }
 }
 
 /* --- Notion UI --- */
@@ -1339,7 +1425,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
 .cal-status-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   padding: 6px 8px 7px 10px;
   border-radius: 6px;
   border: none;
@@ -1347,10 +1433,11 @@ tbody tr:hover { background: var(--bg-card-hover); }
   cursor: pointer;
   overflow: hidden;
   transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
-  line-height: 1.35;
+  line-height: 1.3;
   width: 100%;
   text-align: left;
   background: var(--bg-card);
+  box-sizing: border-box;
 }
 
 .cal-status-card:hover {
@@ -1368,6 +1455,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-height: 1.3em;
 }
 
 .cal-status-card-title {
@@ -1379,18 +1467,19 @@ tbody tr:hover { background: var(--bg-card-hover); }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
+  min-height: 2.6em;
 }
 
 .cal-status-card-desc {
   font-size: 10px;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--text-secondary);
-  margin-top: 2px;
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  min-height: 1.3em;
 }
 
 .cal-status-card-assignees {
@@ -1400,47 +1489,52 @@ tbody tr:hover { background: var(--bg-card-hover); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
+  min-height: 1.3em;
 }
 
-/* Mês — compacto */
+/* Mês — tamanho padrão */
 .cal-status-card--month {
+  height: 86px;
+  min-height: 86px;
+  max-height: 86px;
   padding: 5px 6px 6px 9px;
   border-left-width: 3px;
   border-radius: 5px;
 }
 
 .cal-status-card--month .cal-status-card-client { font-size: 9px; }
-.cal-status-card--month .cal-status-card-title { font-size: 11px; -webkit-line-clamp: 2; line-clamp: 2; }
-.cal-status-card--month .cal-status-card-desc { font-size: 9px; -webkit-line-clamp: 2; line-clamp: 2; }
+.cal-status-card--month .cal-status-card-title { font-size: 11px; min-height: 2.6em; }
+.cal-status-card--month .cal-status-card-desc { font-size: 9px; }
 .cal-status-card--month .cal-status-card-assignees { font-size: 9px; }
 
-/* Semana — cartão maior estilo referência */
+/* Semana — tamanho padrão */
 .cal-status-card--week {
-  padding: 10px 12px 10px 14px;
+  height: 92px;
+  min-height: 92px;
+  max-height: 92px;
+  padding: 8px 10px 8px 12px;
   border-left-width: 4px;
   border-radius: 8px;
-  min-height: 78px;
-  gap: 5px;
+  gap: 3px;
 }
 
 .cal-status-card--week .cal-status-card-client {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.02em;
 }
 
 .cal-status-card--week .cal-status-card-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  flex: 1;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  flex: none;
 }
 
 .cal-status-card--week .cal-status-card-assignees {
-  font-size: 11px;
+  font-size: 10px;
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: 0;
 }
 
 /* Cores por status */
@@ -1783,7 +1877,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
 .notion-week-col,
 .calendar-day[data-cal-day] {
   cursor: pointer;
-  transition: flex 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease;
 }
 
 .notion-week-col.is-focused,
@@ -1798,25 +1892,23 @@ tbody tr:hover { background: var(--bg-card-hover); }
 }
 
 .notion-week-board.has-day-focus .notion-week-cols {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
   gap: 8px;
 }
 
 .notion-week-board.has-day-focus .notion-week-col {
-  flex: 1;
-  min-width: 72px;
+  min-width: 0;
   max-height: 520px;
   overflow-y: auto;
 }
 
 .notion-week-board.has-day-focus .notion-week-col.is-focused {
-  flex: 4;
-  min-width: 240px;
   opacity: 1;
 }
 
 .notion-week-board.has-day-focus .notion-week-col.is-dimmed {
-  flex: 0.65;
+  opacity: 0.45;
 }
 
 .cal-show-more {
@@ -3080,12 +3172,48 @@ body.cal-day-open { overflow: hidden; }
   padding: 20px;
   cursor: pointer;
   transition: all var(--transition);
+  display: flex;
+  flex-direction: column;
 }
 
 .note-card:hover {
   border-color: var(--border-light);
   transform: translateY(-2px);
   box-shadow: var(--shadow-sm);
+}
+
+.note-card.is-completed {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.note-card.is-completed .note-card-title {
+  color: #4ade80;
+}
+
+.note-complete-btn {
+  margin-top: 14px;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.note-complete-btn:hover {
+  border-color: #22c55e;
+  color: #4ade80;
+}
+
+.note-complete-btn.is-done {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  color: #4ade80;
 }
 
 .note-card-title {

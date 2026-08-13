@@ -34,13 +34,23 @@ function emptyState(msg = 'Nenhum registro encontrado') {
     <p style="margin-top:8px;font-size:13px">Clique em "+ Novo" para adicionar</p></div>`;
 }
 
+function sortNotes(notes) {
+  return [...notes].sort((a, b) => {
+    const aDone = a.is_completed ? 1 : 0;
+    const bDone = b.is_completed ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+}
+
 function renderNoteCard(note, { showAuthor = false, showAssignee = false, hideTypeBadge = false } = {}) {
+  const done = !!note.is_completed;
   const typeBadge = hideTypeBadge ? '' : (
     note.note_type === 'general'
       ? '<span class="note-type-badge note-type-general">Geral</span>'
       : '<span class="note-type-badge note-type-personal">Pessoal</span>'
   );
-  return `<div class="note-card" data-edit="notes" data-id="${note.id}">
+  return `<div class="note-card${done ? ' is-completed' : ''}" data-edit="notes" data-id="${note.id}">
     <div class="note-card-header">
       <div class="note-card-title">${escapeHtml(note.title)}</div>
       ${typeBadge}
@@ -51,6 +61,9 @@ function renderNoteCard(note, { showAuthor = false, showAssignee = false, hideTy
       ${showAssignee && note.assignee?.full_name ? `<span class="note-meta-item note-assignee">Responsável: ${escapeHtml(note.assignee.full_name)}</span>` : ''}
       <span class="note-meta-item">${formatDateShort(note.created_at)}</span>
     </div>
+    <button type="button" class="note-complete-btn${done ? ' is-done' : ''}" data-note-complete="${note.id}" data-completed="${done ? '1' : '0'}">
+      ${done ? '✓ Concluída' : 'Concluir'}
+    </button>
   </div>`;
 }
 
@@ -339,7 +352,7 @@ export const Views = {
   },
 
   async calendario(profile) {
-    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260703a');
+    const { renderCalendarView, highlightPendingTask } = await import('./calendar.js?v=20260813b');
     const html = await renderCalendarView(profile);
     queueMicrotask(() => highlightPendingTask());
     return html;
@@ -575,7 +588,7 @@ export const Views = {
 
   async 'notas-pessoais'(profile) {
     const notes = await notesApi.list({ order: { column: 'created_at', asc: false } });
-    const personalNotes = notes.filter(n => n.note_type === 'personal');
+    const personalNotes = sortNotes(notes.filter(n => n.note_type === 'personal'));
     const cardsHtml = personalNotes.length
       ? personalNotes.map(n => renderNoteCard(n, { hideTypeBadge: true })).join('')
       : emptyState('Nenhuma nota pessoal');
@@ -587,7 +600,7 @@ export const Views = {
 
   async 'notas-gerais'(profile) {
     const notes = await notesApi.list({ order: { column: 'created_at', asc: false } });
-    const generalNotes = notes.filter(n => n.note_type === 'general');
+    const generalNotes = sortNotes(notes.filter(n => n.note_type === 'general'));
     const cardsHtml = generalNotes.length
       ? generalNotes.map(n => renderNoteCard(n, { showAuthor: true, showAssignee: true, hideTypeBadge: true })).join('')
       : emptyState('Nenhuma nota geral');
