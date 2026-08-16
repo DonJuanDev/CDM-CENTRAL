@@ -224,7 +224,7 @@ async function callClaude(opts: {
       const msg = parsed?.error?.message || "";
       if (/credit balance is too low/i.test(msg)) {
         friendly =
-          "Saldo Anthropic esgotado. Entre em console.anthropic.com → Plans & Billing e compre créditos.";
+          "Saldo Anthropic esgotado. Use Gemini grátis: secret GEMINI_API_KEY + OFFICE_LLM_PROVIDER=gemini.";
       } else if (msg) {
         friendly = msg;
       }
@@ -237,6 +237,91 @@ async function callClaude(opts: {
   const data = await res.json();
   const parts = (data.content ?? []) as Array<{ type: string; text?: string }>;
   return parts.filter((p) => p.type === "text").map((p) => p.text || "").join("\n");
+}
+
+/** Gemini (Google AI Studio) — free tier bom pra copy do Escritório */
+async function callGemini(opts: {
+  system: string;
+  userText: string;
+  images?: Array<{ media_type: string; data: string }>;
+}): Promise<string> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY não configurada. Pegue grátis em https://aistudio.google.com/apikey"
+    );
+  }
+
+  const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash";
+  const parts: Array<Record<string, unknown>> = [
+    { text: opts.userText },
+  ];
+
+  for (const img of opts.images ?? []) {
+    parts.push({
+      inline_data: {
+        mime_type: img.media_type,
+        data: img.data,
+      },
+    });
+  }
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    let friendly = err.slice(0, 300);
+    try {
+      const parsed = JSON.parse(err) as { error?: { message?: string } };
+      if (parsed?.error?.message) friendly = parsed.error.message;
+    } catch {
+      /* keep */
+    }
+    throw new Error("Gemini: " + friendly);
+  }
+
+  const data = await res.json() as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+  };
+  const texts = (data.candidates?.[0]?.content?.parts ?? [])
+    .map((p) => p.text || "")
+    .filter(Boolean);
+  if (!texts.length) throw new Error("Gemini não retornou texto");
+  return texts.join("\n");
+}
+
+function resolveLlmProvider(): "gemini" | "anthropic" {
+  const forced = (Deno.env.get("OFFICE_LLM_PROVIDER") || "").toLowerCase();
+  if (forced === "gemini" || forced === "anthropic") return forced;
+  // Preferência: Gemini grátis se a key existir
+  if (Deno.env.get("GEMINI_API_KEY")) return "gemini";
+  return "anthropic";
+}
+
+async function callLLM(opts: {
+  system: string;
+  userText: string;
+  images?: Array<{ media_type: string; data: string }>;
+}): Promise<string> {
+  const provider = resolveLlmProvider();
+  if (provider === "gemini") return callGemini(opts);
+  return callClaude(opts);
 }
 
 async function runSingleTask(
@@ -373,12 +458,12 @@ Preencha os campos relevantes ao tipo (post → headline+caption+cta; roteiro �
 
 Use as imagens anexadas (thumbnails Canva) para manter consistência visual/tom. Não invente produtos que não existam no briefing.`;
 
-    let raw = await callClaude({ system, userText, images });
+    let raw = await callLLM({ system, userText, images });
     let output = extractJson(raw);
 
     // QA pass for content roles
     if (["social", "roteirista", "roteirista_ads"].includes(role)) {
-      const qaRaw = await callClaude({
+      const qaRaw = await callLLM({
         system: ROLE_PROMPTS.qa,
         userText: `Revise este entregável e devolva JSON no mesmo formato (headline, caption, script, cta, notes) com melhorias:\n\n${JSON.stringify(output)}`,
       });
