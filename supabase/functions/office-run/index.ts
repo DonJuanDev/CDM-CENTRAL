@@ -252,12 +252,42 @@ async function callGemini(opts: {
     );
   }
 
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
-  const parts: Array<Record<string, unknown>> = [
-    { text: opts.userText },
-  ];
+  const preferred = (Deno.env.get("GEMINI_MODEL") || "").trim();
+  const candidates = [
+    preferred,
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
-  for (const img of opts.images ?? []) {
+  // Descobre modelos disponíveis na conta (evita 2.0 desligado / nomes errados)
+  try {
+    const listRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    if (listRes.ok) {
+      const listData = await listRes.json() as {
+        models?: Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+      };
+      const usable = (listData.models ?? [])
+        .filter((m) =>
+          (m.supportedGenerationMethods ?? []).includes("generateContent")
+        )
+        .map((m) => (m.name || "").replace(/^models\//, ""))
+        .filter(Boolean);
+      const flash = usable.filter((n) => /flash/i.test(n) && !/image|tts|live/i.test(n));
+      for (const name of [...flash, ...usable]) {
+        if (!candidates.includes(name)) candidates.push(name);
+      }
+    }
+  } catch {
+    /* segue com a lista fixa */
+  }
+
+  const parts: Array<Record<string, unknown>> = [{ text: opts.userText }];
+  for (const img of (opts.images ?? []).slice(0, 3)) {
     parts.push({
       inline_data: {
         mime_type: img.media_type,
@@ -266,53 +296,60 @@ async function callGemini(opts: {
     });
   }
 
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const body = {
+    systemInstruction: { parts: [{ text: opts.system }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+    },
+  };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: opts.system }] },
-      contents: [{ role: "user", parts }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-      },
-    }),
-  });
+  let lastError = "nenhum modelo Gemini respondeu";
 
-  if (!res.ok) {
-    const err = await res.text();
-    let friendly = err.slice(0, 400);
-    try {
-      const parsed = JSON.parse(err) as { error?: { message?: string } };
-      const msg = parsed?.error?.message || "";
-      if (/has not been used|is disabled|Enable it by visiting/i.test(msg)) {
-        friendly =
-          "Ative a API Gemini no Google: abra https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com e clique em Ativar. Depois espere 1–2 min e rode de novo.";
-      } else if (/no longer available|not found/i.test(msg)) {
-        friendly =
-          "Modelo Gemini inválido. No Supabase secrets use GEMINI_MODEL=gemini-2.5-flash";
-      } else if (msg) {
-        friendly = msg;
+  for (const model of candidates.slice(0, 8)) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      try {
+        const parsed = JSON.parse(err) as { error?: { message?: string } };
+        const msg = parsed?.error?.message || err.slice(0, 200);
+        if (/has not been used|is disabled|Enable it by visiting/i.test(msg)) {
+          throw new Error(
+            "Ative a API Gemini: https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com — espere 1–2 min e tente de novo."
+          );
+        }
+        lastError = `${model}: ${msg}`;
+      } catch (e) {
+        if ((e as Error).message?.startsWith("Ative a API")) throw e;
+        lastError = `${model}: ${err.slice(0, 200)}`;
       }
-    } catch {
-      /* keep */
+      continue;
     }
-    throw new Error("Gemini: " + friendly);
+
+    const data = await res.json() as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+    const texts = (data.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text || "")
+      .filter(Boolean);
+    if (!texts.length) {
+      lastError = `${model}: resposta vazia`;
+      continue;
+    }
+    return texts.join("\n");
   }
 
-  const data = await res.json() as {
-    candidates?: Array<{
-      content?: { parts?: Array<{ text?: string }> };
-    }>;
-  };
-  const texts = (data.candidates?.[0]?.content?.parts ?? [])
-    .map((p) => p.text || "")
-    .filter(Boolean);
-  if (!texts.length) throw new Error("Gemini não retornou texto");
-  return texts.join("\n");
+  throw new Error("Gemini: " + lastError);
 }
 
 function resolveLlmProvider(): "gemini" | "anthropic" {
