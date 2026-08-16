@@ -377,9 +377,20 @@ Deno.serve(async (req) => {
     );
 
     const url = new URL(req.url);
-    const action = url.searchParams.get("action") ?? "";
+    let action = url.searchParams.get("action") ?? "";
     const body: Record<string, unknown> =
       req.method === "POST" ? await req.json().catch(() => ({})) : {};
+
+    // Canva/Meta às vezes trocam a query string e removem action=oauth_callback,
+    // deixando só code/state (ou error). Tratar isso como callback OAuth.
+    const hasOAuthCode = url.searchParams.has("code") && url.searchParams.has("state");
+    const hasOAuthError = url.searchParams.has("error") && url.searchParams.has("state");
+    if (!action && (hasOAuthCode || hasOAuthError)) {
+      action = "oauth_callback";
+    }
+    if (url.pathname.endsWith("/oauth_callback") || url.pathname.endsWith("/callback")) {
+      action = "oauth_callback";
+    }
 
     if (action === "oauth_callback") {
       const code = url.searchParams.get("code");
@@ -393,15 +404,20 @@ Deno.serve(async (req) => {
         );
       }
 
+      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations`;
+
+      // state pode vir URL-encoded / base64url
+      const decodeState = (raw: string) => {
+        const normalized = decodeURIComponent(raw).replace(/-/g, "+").replace(/_/g, "/");
+        return JSON.parse(atob(normalized)) as Record<string, string>;
+      };
+
       let state: Record<string, string>;
       try {
-        state = JSON.parse(atob(stateRaw));
+        state = decodeState(stateRaw!);
       } catch {
         return Response.redirect(`${APP_URL}/app.html#/integracoes?oauth_error=bad_state`, 302);
       }
-
-      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
-
       if (state.provider === "meta_ads") {
         const appId = Deno.env.get("META_APP_ID");
         const appSecret = Deno.env.get("META_APP_SECRET");
@@ -837,11 +853,12 @@ Deno.serve(async (req) => {
           provider: "canva",
           integration_id: canvaRow.id,
           user_id: user.id,
-        }));
+        })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-        const canvaRedirect = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
+        // Sem query string: Canva preserva melhor o redirect e devolve ?code=&state=
+        const canvaRedirect = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations`;
         const authUrl = buildCanvaAuthUrl({
-          clientId: canvaClientId,
+          clientId: canvaClientId.trim(),
           redirectUri: canvaRedirect,
           codeChallenge: challenge,
           state: canvaState,
