@@ -4,7 +4,7 @@ import { readViewFromLocation, writeViewToLocation, writeViewHash, parseHashQuer
 import { ROLE_LABELS } from './config.js';
 import { dismissCrudModal, openCrudModal } from './forms.js?v=20260813b';
 
-const BUILD = '20260816a';
+const BUILD = '20260816c';
 
 const App = {
   profile: null,
