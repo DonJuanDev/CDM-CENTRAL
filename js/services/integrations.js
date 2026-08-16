@@ -56,4 +56,11 @@ export const integrationsService = {
 
   saveCanvaMappings: (integrationId, mappings) =>
     callIntegration('save_canva_mappings', { integration_id: integrationId, mappings }),
+
+  registerCanvaFolders: (integrationId, links, clientId = null) =>
+    callIntegration('register_canva_folders', {
+      integration_id: integrationId,
+      links,
+      client_id: clientId,
+    }),
 };

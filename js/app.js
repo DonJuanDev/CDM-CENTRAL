@@ -417,7 +417,7 @@ async function bindViewEvents(view) {
 
       try {
         const [{ integrationsService }, { clientsApi }] = await Promise.all([
-          import('./services/integrations.js?v=20260816a'),
+          import('./services/integrations.js?v=20260816b'),
           import('./api/crud.js?v=20260703a'),
         ]);
         const [{ folders }, clients] = await Promise.all([
@@ -430,12 +430,23 @@ async function bindViewEvents(view) {
         ).join('');
 
         body.innerHTML = `
+          <div class="int-canva-track card" style="margin-bottom:16px;padding:14px;background:var(--bg-secondary)">
+            <div class="int-guide-title" style="margin-bottom:6px">📎 Colar link da pasta Canva</div>
+            <p class="settings-desc" style="margin-bottom:10px">No Canva: abra a pasta (ex.: Phytomaster) → copie o link da barra de endereço (deve ter <code>/folder/</code>). Um link por linha.</p>
+            <textarea id="int-canva-folder-links" class="form-input" rows="3" placeholder="https://www.canva.com/folder/FAF…" style="width:100%;margin-bottom:8px"></textarea>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <select id="int-canva-folder-client" class="form-input" style="min-width:200px">
+                <option value="">Cliente (opcional — tenta pelo nome)</option>
+                ${clientOptions}
+              </select>
+              <button type="button" class="btn btn-primary btn-sm" id="int-canva-folder-add">Adicionar e sincronizar pasta</button>
+            </div>
+          </div>
           <div class="int-mappings-table-wrap">
             <table class="notion-table">
-              <thead><tr><th>Pasta Canva</th><th>ID</th><th>Cliente CDM</th></tr></thead>
+              <thead><tr><th>Pasta / marca</th><th>ID</th><th>Cliente CDM</th></tr></thead>
               <tbody>
                 ${(folders || []).map(f => {
-                  const selected = f.matched_client_id || '';
                   const autoBadge = f.matched_client_id && !f.manual_mapping
                     ? '<span class="int-map-auto">auto</span>' : '';
                   return `<tr>
@@ -448,7 +459,7 @@ async function bindViewEvents(view) {
                       </select>
                     </td>
                   </tr>`;
-                }).join('') || '<tr><td colspan="3">Nenhuma pasta sincronizada. Clique em Sincronizar primeiro.</td></tr>'}
+                }).join('') || '<tr><td colspan="3">Nenhuma pasta ainda. Cole o link da Phytomaster acima.</td></tr>'}
               </tbody>
             </table>
           </div>`;
@@ -461,6 +472,32 @@ async function bindViewEvents(view) {
         loading?.classList.add('hidden');
         body?.classList.remove('hidden');
         footer?.classList.remove('hidden');
+
+        $('#int-canva-folder-add').onclick = async () => {
+          const raw = ($('#int-canva-folder-links')?.value || '').trim();
+          if (!raw) {
+            showToast('Cole o link da pasta do Canva', 'error');
+            return;
+          }
+          const links = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
+          const clientId = $('#int-canva-folder-client')?.value || null;
+          const btn = $('#int-canva-folder-add');
+          try {
+            if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando pasta…'; }
+            const result = await integrationsService.registerCanvaFolders(integrationId, links, clientId);
+            showToast(
+              `Pasta ok: ${result.designs} artes · ${result.folders ?? 0} pastas` +
+                (result.added?.length ? ` (+${result.added.length} link)` : ''),
+              'success'
+            );
+            await loadCanvaMappingsPanel(integrationId);
+            refresh();
+          } catch (err) {
+            showToast(err.message || 'Erro ao registrar pasta', 'error');
+          } finally {
+            if (btn) { btn.disabled = false; btn.textContent = 'Adicionar e sincronizar pasta'; }
+          }
+        };
 
         $('#int-canva-mappings-save').onclick = async () => {
           const mappings = {};

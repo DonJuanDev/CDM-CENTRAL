@@ -4,6 +4,7 @@ import {
   buildCanvaAuthUrl,
   createPkcePair,
   exchangeCanvaCode,
+  parseCanvaFolderId,
   syncCanvaCatalog,
   type CanvaSettings,
 } from "./canva.ts";
@@ -976,13 +977,107 @@ Deno.serve(async (req) => {
         return json({ success: true, integration: data });
       }
 
+      case "register_canva_folders": {
+        const {
+          integration_id,
+          links,
+          client_id,
+        } = body as {
+          integration_id?: string;
+          links?: string[];
+          client_id?: string | null;
+        };
+        if (!integration_id) return json({ error: "integration_id é obrigatório" }, 400);
+
+        const rawLinks = (links ?? []).map((l) => String(l || "").trim()).filter(Boolean);
+        if (!rawLinks.length) {
+          return json({ error: "Cole pelo menos um link ou ID de pasta Canva" }, 400);
+        }
+
+        const { data: integration } = await supabase
+          .from("integrations")
+          .select("*")
+          .eq("id", integration_id)
+          .single();
+        if (!integration) return json({ error: "Integração não encontrada" }, 404);
+
+        const settings = (integration.settings ?? {}) as CanvaSettings;
+        const tracked = [...(settings.tracked_folders ?? [])];
+        const added: string[] = [];
+        const invalid: string[] = [];
+
+        for (const link of rawLinks) {
+          const folderId = parseCanvaFolderId(link);
+          if (!folderId) {
+            invalid.push(link);
+            continue;
+          }
+          const existing = tracked.findIndex((t) => t.folder_id === folderId);
+          const entry = {
+            folder_id: folderId,
+            client_id: client_id || tracked[existing]?.client_id || null,
+            name: tracked[existing]?.name,
+          };
+          if (existing >= 0) tracked[existing] = entry;
+          else tracked.push(entry);
+          added.push(folderId);
+        }
+
+        if (!added.length) {
+          return json({
+            error: "Não consegui ler ID de pasta. Abra a pasta no Canva e copie o link da barra (deve ter /folder/…).",
+            invalid,
+          }, 400);
+        }
+
+        await supabase
+          .from("integrations")
+          .update({
+            settings: { ...settings, tracked_folders: tracked },
+          })
+          .eq("id", integration_id);
+
+        // Sync na hora pra puxar as artes das pastas novas
+        const catalog = await syncCanvaCatalog(supabase, {
+          ...integration,
+          settings: { ...settings, tracked_folders: tracked },
+        });
+
+        await supabase.from("integrations").update({
+          status: "connected",
+          last_sync: new Date().toISOString(),
+          settings: {
+            ...settings,
+            tracked_folders: tracked,
+            last_sync_summary: {
+              folders: catalog.folders,
+              designs: catalog.designs,
+              unmatched: catalog.unmatched,
+              warnings: catalog.warnings ?? [],
+              personal_folders: catalog.personal_folders ?? 0,
+              virtual_folders: catalog.virtual_folders ?? 0,
+              tracked_folders: catalog.tracked_folders ?? tracked.length,
+              synced_at: new Date().toISOString(),
+            },
+          },
+        }).eq("id", integration_id);
+
+        return json({
+          success: true,
+          added,
+          invalid,
+          tracked_folders: tracked,
+          ...catalog,
+        });
+      }
+
       default:
         return json({
           message: "Integrações CDM Central",
           available_actions: [
             "list", "connect", "sync", "disconnect", "oauth_start", "oauth_callback",
             "list_ad_accounts", "save_mappings",
-            "list_canva_folders", "save_canva_mappings",
+            "list_canva_folders", "save_canva_mappings", "register_canva_folders",
           ],
         });
     }

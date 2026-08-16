@@ -798,7 +798,7 @@ export const Views = {
         <div class="int-mappings-header">
           <div>
             <div class="int-guide-title">Vincular marcas Canva → clientes CDM</div>
-            <p class="settings-desc">O Canva só libera pastas pessoais via API. Artes do time (Phytomaster, RSWF…) são agrupadas pelo nome do título. Confira e ajuste os vínculos.</p>
+            <p class="settings-desc">Pastas grandes do time (Phytomaster, RSWF…) <strong>não aparecem sozinhas na API</strong>. Cole o link da pasta abaixo para puxar todas as artes de dentro.</p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="int-canva-mappings-close">Fechar</button>
         </div>

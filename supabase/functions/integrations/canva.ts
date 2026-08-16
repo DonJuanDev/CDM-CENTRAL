@@ -19,8 +19,38 @@ export type CanvaSettings = {
   code_verifier?: string;
   mode?: string;
   folder_mappings?: Record<string, string>;
+  /** Pastas do time coladas via link (API não lista elas no root pessoal) */
+  tracked_folders?: Array<{
+    folder_id: string;
+    client_id?: string | null;
+    name?: string;
+  }>;
   last_sync_summary?: Record<string, unknown>;
 };
+
+/** Extrai ID de pasta de URL Canva ou ID puro (ex.: FAFxxxx). */
+export function parseCanvaFolderId(input: string): string | null {
+  const raw = (input || "").trim();
+  if (!raw) return null;
+
+  const fromPath = raw.match(
+    /canva\.com\/(?:folder|folders)\/([A-Za-z0-9_-]+)/i
+  );
+  if (fromPath?.[1] && fromPath[1] !== "root" && fromPath[1] !== "uploads") {
+    return fromPath[1];
+  }
+
+  const fromQuery = raw.match(
+    /[?&#](?:folderId|folder_id|folder|id)=([A-Za-z0-9_-]+)/i
+  );
+  if (fromQuery?.[1]) return fromQuery[1];
+
+  if (/^[A-Za-z0-9_-]{6,50}$/.test(raw) && raw !== "root" && raw !== "uploads") {
+    return raw;
+  }
+
+  return null;
+}
 
 type CdmClient = { id: string; company_name: string };
 type Supabase = ReturnType<typeof createClient>;
@@ -562,15 +592,152 @@ export async function syncCanvaCatalog(
   }
 
   warnings.push(
-    "Total liberado pela API do Canva para esta conta: " +
+    "Lista geral da API: " +
       designRows.length +
-      " artes. Itens que você vê nas pastas do time mas não entram aqui não estão compartilhados com o usuário conectado — reconecte com a conta dona das pastas ou compartilhe as artes com ela."
+      " artes. Pastas grandes do time (ex.: Phytomaster 850) só entram se você colar o link da pasta em Vincular pastas."
   );
 
+  // ── Fase 3: pastas rastreadas por link (desce a árvore TODA, sem teto) ──
+  const tracked = settings.tracked_folders ?? [];
+  let trackedDesignAdds = 0;
+  let trackedImageSkips = 0;
+
+  async function deepSyncTrackedFolder(
+    folderId: string,
+    preferredClientId: string | null,
+    folderNameHint?: string
+  ) {
+    let metaName = folderNameHint || folderId;
+    try {
+      const meta = await canvaFetch("/folders/" + folderId, token);
+      const folder = (meta.folder as { name?: string; id?: string } | undefined) ??
+        (meta as { name?: string });
+      if (folder?.name) metaName = folder.name;
+    } catch (e) {
+      warnings.push(
+        "Pasta " + folderId + ": " + (e as Error).message +
+          " (confira se a conta conectada tem acesso a essa pasta)"
+      );
+      return;
+    }
+
+    const matched =
+      (preferredClientId
+        ? cdmClients.find((c) => c.id === preferredClientId)
+        : null) ??
+      matchClientByName(metaName, cdmClients, manualMappings, folderId);
+    const clientId = matched?.id ?? preferredClientId ?? null;
+
+    folderRows.push({
+      folder_id: folderId,
+      name: metaName,
+      parent_folder_id: null,
+      client_id: clientId,
+    });
+
+    type DeepNode = { id: string; name: string; clientId: string | null };
+    const deepQueue: DeepNode[] = [
+      { id: folderId, name: metaName, clientId },
+    ];
+    const deepVisited = new Set<string>();
+
+    while (deepQueue.length) {
+      const node = deepQueue.shift()!;
+      if (deepVisited.has(node.id)) continue;
+      deepVisited.add(node.id);
+
+      let items: FolderItem[] = [];
+      try {
+        // Sem maxItems — pagina tudo (designs + subpastas + conta imagens)
+        items = await listFolderItems(token, node.id, {
+          itemTypes: "folder,design,image",
+          sortBy: "modified_descending",
+        });
+      } catch (e) {
+        warnings.push(
+          "Itens de " + node.name + ": " + (e as Error).message
+        );
+        continue;
+      }
+
+      for (const item of items) {
+        if (item.type === "folder" && item.folder?.id) {
+          const subName = item.folder.name || item.folder.id;
+          const subClient =
+            matchClientByName(
+              subName,
+              cdmClients,
+              manualMappings,
+              item.folder.id
+            )?.id ?? node.clientId;
+
+          folderRows.push({
+            folder_id: item.folder.id,
+            name: subName,
+            parent_folder_id: node.id,
+            client_id: subClient,
+          });
+          deepQueue.push({
+            id: item.folder.id,
+            name: subName,
+            clientId: subClient,
+          });
+        } else if (item.type === "image") {
+          trackedImageSkips++;
+        } else if (item.type === "design" && item.design?.id) {
+          const before = designIdsSeen.size;
+          ingestDesign(item.design, node.clientId);
+          // reforça pasta real (não virtual)
+          const row = designRows.find((r) => r.design_id === item.design!.id);
+          if (row) {
+            row.folder_id = node.id;
+            if (node.clientId) row.client_id = node.clientId;
+          }
+          if (designIdsSeen.size > before) trackedDesignAdds++;
+        }
+      }
+    }
+  }
+
+  for (const t of tracked) {
+    if (!t.folder_id) continue;
+    await deepSyncTrackedFolder(
+      t.folder_id,
+      t.client_id ?? manualMappings[t.folder_id] ?? null,
+      t.name
+    );
+  }
+
+  if (tracked.length) {
+    warnings.push(
+      "Pastas por link: +" +
+        trackedDesignAdds +
+        " artes" +
+        (trackedImageSkips
+          ? " (" + trackedImageSkips + " imagens ignoradas — não são designs)"
+          : "")
+    );
+  }
+
+  // Recalcula contagens por cliente após deep sync
+  clientDesignCounts.clear();
+  for (const row of designRows) {
+    if (!row.client_id) continue;
+    clientDesignCounts.set(
+      row.client_id,
+      (clientDesignCounts.get(row.client_id) ?? 0) + 1
+    );
+  }
+
   const virtualFolders: FolderRow[] = [];
+  const realFolderClientIds = new Set(
+    folderRows.filter((f) => f.client_id).map((f) => f.client_id as string)
+  );
   for (const client of cdmClients) {
     const count = clientDesignCounts.get(client.id) ?? 0;
     if (!count) continue;
+    // Se já tem pasta real rastreada/pessoal do cliente, não cria virtual
+    if (realFolderClientIds.has(client.id)) continue;
     const folderId = "virt:" + client.id;
     virtualFolders.push({
       folder_id: folderId,
@@ -580,7 +747,12 @@ export async function syncCanvaCatalog(
     });
   }
 
-  const allFolders = [...folderRows, ...virtualFolders];
+  // Dedup folders by folder_id (última ganha)
+  const folderById = new Map<string, FolderRow>();
+  for (const f of [...folderRows, ...virtualFolders]) {
+    folderById.set(f.folder_id, f);
+  }
+  const allFolders = [...folderById.values()];
 
   await supabase
     .from("canva_folders")
@@ -634,6 +806,7 @@ export async function syncCanvaCatalog(
     warnings: warnings.slice(0, 20),
     personal_folders: personalFolderCount,
     virtual_folders: virtualFolders.length,
+    tracked_folders: tracked.length,
   };
 }
 
