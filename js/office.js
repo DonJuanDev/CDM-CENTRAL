@@ -25,8 +25,34 @@ const STATUS_LABEL = {
 };
 
 function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDaysKey(dateKey, days) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+async function loadAgendaTasks() {
+  const today = todayKey();
+  const horizon = addDaysKey(today, 7);
+  const tasks = await tasksApi.list({
+    order: { column: 'due_date', asc: true },
+    limit: 80,
+  });
+
+  return (tasks || []).filter(t => {
+    if (['concluida', 'cancelada'].includes(t.status)) return false;
+    if (!['pendente', 'em_progresso', 'em_aprovacao'].includes(t.status)) return false;
+    if (!t.due_date) return true;
+    return t.due_date <= horizon;
+  }).slice(0, 20);
 }
 
 function classifyTitle(title = '') {
@@ -77,20 +103,6 @@ async function loadCanvaStatus() {
     .is('client_id', null)
     .maybeSingle();
   return data;
-}
-
-async function loadAgendaTasks() {
-  const today = todayKey();
-  const tasks = await tasksApi.list({
-    order: { column: 'due_date', asc: true },
-    limit: 80,
-  });
-
-  return (tasks || []).filter(t => {
-    if (['concluida', 'cancelada'].includes(t.status)) return false;
-    if (!t.due_date) return ['pendente', 'em_progresso', 'em_aprovacao'].includes(t.status);
-    return t.due_date <= today && ['pendente', 'em_progresso', 'em_aprovacao'].includes(t.status);
-  }).slice(0, 20);
 }
 
 function agentDeskHtml(agent, jobs) {
@@ -227,7 +239,7 @@ export async function renderOffice(profile) {
       </section>
 
       <section class="office-section">
-        <div class="section-header"><span class="section-title">Pauta do dia</span>
+        <div class="section-header"><span class="section-title">Pauta da semana</span>
           <span class="kanban-count">${tasks.length}</span>
         </div>
         <div class="card office-agenda" id="office-agenda">
@@ -246,7 +258,7 @@ export async function renderOffice(profile) {
               ${statusBadge(t.status)}
               ${canRun ? `<button type="button" class="btn btn-ghost btn-sm" data-run-task="${t.id}">Rodar</button>` : ''}
             </div>`;
-          }).join('') : '<div class="empty-state" style="padding:32px"><div class="empty-state-title">Nada na pauta de hoje</div></div>'}
+          }).join('') : '<div class="empty-state" style="padding:32px"><div class="empty-state-title">Nada na pauta (próximos 7 dias)</div></div>'}
         </div>
       </section>
 
@@ -331,7 +343,15 @@ export function bindOfficeEvents({ profile, refresh }) {
       btn.disabled = true;
       btn.textContent = 'Rodando…';
       const result = await callOffice('run_day', {});
-      showToast(`Expediente: ${result.started ?? 0} job(s) iniciados`, 'success');
+      if ((result.started ?? 0) === 0) {
+        showToast(result.message || 'Nenhuma task na pauta da semana', 'info');
+      } else {
+        showToast(
+          `Expediente: ${result.started} job(s) iniciados` +
+            (result.failed ? ` · ${result.failed} falha(s)` : ''),
+          result.failed ? 'warning' : 'success'
+        );
+      }
       await refreshJobsUi();
     } catch (err) {
       handleError(err);

@@ -25,8 +25,26 @@ function json(data: unknown, status = 200) {
 }
 
 function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Expediente da agência = calendário de Brasília, não UTC do servidor
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function addDaysKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Pauta do expediente: atrasadas + hoje + próximos 7 dias */
+function isInOfficeAgenda(dueDate: string | null, today: string): boolean {
+  if (!dueDate) return true;
+  const horizon = addDaysKey(today, 7);
+  return dueDate <= horizon;
 }
 
 function classifyTitle(title = "") {
@@ -463,13 +481,29 @@ Deno.serve(async (req) => {
         .from("tasks")
         .select("id, title, due_date, status")
         .in("status", ["pendente", "em_progresso", "em_aprovacao"])
-        .order("due_date", { ascending: true })
-        .limit(40);
+        .order("due_date", { ascending: true, nullsFirst: true })
+        .limit(60);
 
-      const agenda = (tasks ?? []).filter((t) => {
-        if (!t.due_date) return true;
-        return t.due_date <= today;
-      }).slice(0, 8);
+      const agenda = (tasks ?? [])
+        .filter((t) => isInOfficeAgenda(t.due_date, today))
+        .sort((a, b) => {
+          // Prioriza atrasadas/hoje, depois as da semana
+          const ad = a.due_date || today;
+          const bd = b.due_date || today;
+          return ad.localeCompare(bd);
+        })
+        .slice(0, 8);
+
+      if (!agenda.length) {
+        return json({
+          success: true,
+          started: 0,
+          failed: 0,
+          results: [],
+          message:
+            "Nenhuma task na pauta (atrasadas, hoje ou próximos 7 dias). Confira datas no Calendário.",
+        });
+      }
 
       const results: Array<{ task_id: string; ok: boolean; error?: string }> = [];
       // Parallelism of 2
@@ -481,7 +515,16 @@ Deno.serve(async (req) => {
         settled.forEach((s, idx) => {
           const tid = batch[idx].id;
           if (s.status === "fulfilled") results.push({ task_id: tid, ok: true });
-          else results.push({ task_id: tid, ok: false, error: String(s.reason?.message || s.reason) });
+          else {
+            results.push({
+              task_id: tid,
+              ok: false,
+              error: String(
+                (s as PromiseRejectedResult).reason?.message ||
+                  (s as PromiseRejectedResult).reason
+              ),
+            });
+          }
         });
       }
 
@@ -490,6 +533,7 @@ Deno.serve(async (req) => {
         started: results.filter((r) => r.ok).length,
         failed: results.filter((r) => !r.ok).length,
         results,
+        agenda_count: agenda.length,
       });
     }
 
