@@ -252,7 +252,7 @@ async function callGemini(opts: {
     );
   }
 
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash";
+  const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
   const parts: Array<Record<string, unknown>> = [
     { text: opts.userText },
   ];
@@ -284,10 +284,19 @@ async function callGemini(opts: {
 
   if (!res.ok) {
     const err = await res.text();
-    let friendly = err.slice(0, 300);
+    let friendly = err.slice(0, 400);
     try {
       const parsed = JSON.parse(err) as { error?: { message?: string } };
-      if (parsed?.error?.message) friendly = parsed.error.message;
+      const msg = parsed?.error?.message || "";
+      if (/has not been used|is disabled|Enable it by visiting/i.test(msg)) {
+        friendly =
+          "Ative a API Gemini no Google: abra https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com e clique em Ativar. Depois espere 1–2 min e rode de novo.";
+      } else if (/no longer available|not found/i.test(msg)) {
+        friendly =
+          "Modelo Gemini inválido. No Supabase secrets use GEMINI_MODEL=gemini-2.5-flash";
+      } else if (msg) {
+        friendly = msg;
+      }
     } catch {
       /* keep */
     }
