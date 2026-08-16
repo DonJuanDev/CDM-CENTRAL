@@ -582,6 +582,9 @@ async function bindViewEvents(view) {
           let msg;
           if (result.designs != null) {
             msg = `Canva: ${result.designs} artes · ${result.folders ?? 0} pastas`;
+            if (result.warnings?.length) {
+              msg += ` (avisos: ${result.warnings.length})`;
+            }
           } else {
             msg = `Sync concluído: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`;
           }

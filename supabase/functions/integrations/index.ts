@@ -736,6 +736,7 @@ Deno.serve(async (req) => {
             const catalog = await syncCanvaCatalog(supabase, integration);
             result = { success: true, ...catalog };
 
+            const warnText = (catalog.warnings ?? []).slice(0, 3).join(" · ");
             await supabase.from("integrations").update({
               status: "connected",
               last_sync: new Date().toISOString(),
@@ -745,6 +746,7 @@ Deno.serve(async (req) => {
                   folders: catalog.folders,
                   designs: catalog.designs,
                   unmatched: catalog.unmatched,
+                  warnings: catalog.warnings ?? [],
                   synced_at: new Date().toISOString(),
                 },
               },
@@ -752,11 +754,15 @@ Deno.serve(async (req) => {
 
             await supabase.from("integration_sync_logs").insert({
               integration_id,
-              status: catalog.unmatched.length ? "partial" : "success",
+              status:
+                catalog.warnings?.length || catalog.unmatched.length
+                  ? "partial"
+                  : "success",
               records_synced: catalog.designs,
-              error_message: catalog.unmatched.length
-                ? `${catalog.unmatched.length} pasta(s) sem cliente vinculado`
-                : null,
+              error_message: warnText
+                || (catalog.unmatched.length
+                  ? `${catalog.unmatched.length} pasta(s) sem cliente vinculado`
+                  : null),
             });
           } else {
             throw new Error(`Sync não implementado para ${integration.provider}`);
