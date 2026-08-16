@@ -1,0 +1,3 @@
+# OAuth callback do Canva/Meta chega sem JWT do usuário.
+# Auth continua sendo validada dentro da function para as demais actions.
+verify_jwt = false
