@@ -359,7 +359,7 @@ export const Views = {
   },
 
   async escritorio(profile) {
-    const { renderOffice } = await import('./office.js?v=20260816c');
+    const { renderOffice } = await import('./office.js?v=20260816d');
     return renderOffice(profile);
   },
 

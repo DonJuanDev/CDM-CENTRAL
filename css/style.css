@@ -1421,7 +1421,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
 .notion-card-compact.owner-ney { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); }
 .notion-card-compact.owner-default { background: var(--bg-card); color: var(--text-secondary); }
 
-/* ── Calendário Mês/Semana — cartão por status ─────────────────── */
+/* ââ CalendÃ¡rio MÃªs/Semana â cartÃ£o por status âââââââââââââââââââ */
 .cal-status-card {
   display: flex;
   flex-direction: column;
@@ -1492,7 +1492,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
   min-height: 1.3em;
 }
 
-/* Mês — tamanho padrão */
+/* MÃªs â tamanho padrÃ£o */
 .cal-status-card--month {
   height: 86px;
   min-height: 86px;
@@ -1507,7 +1507,7 @@ tbody tr:hover { background: var(--bg-card-hover); }
 .cal-status-card--month .cal-status-card-desc { font-size: 9px; }
 .cal-status-card--month .cal-status-card-assignees { font-size: 9px; }
 
-/* Semana — tamanho padrão */
+/* Semana â tamanho padrÃ£o */
 .cal-status-card--week {
   height: 92px;
   min-height: 92px;
@@ -2278,7 +2278,7 @@ body.cal-day-open { overflow: hidden; }
 .alert-dot.info { background: var(--info); }
 
 /* --- Integration Grid --- */
-/* ── Integrações (legacy - mantido para compatibilidade) ── */
+/* ââ IntegraÃ§Ãµes (legacy - mantido para compatibilidade) ââ */
 .integration-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -2298,7 +2298,7 @@ body.cal-day-open { overflow: hidden; }
 .integration-name { font-size: 12px; font-weight: 500; margin-top: 8px; }
 .integration-status { font-size: 10px; color: var(--success); margin-top: 4px; }
 
-/* ── Integrações v2 ── */
+/* ââ IntegraÃ§Ãµes v2 ââ */
 .int-setup-guide {
   background: rgba(59, 130, 246, 0.06);
   border: 1px solid rgba(59, 130, 246, 0.25);
@@ -2435,7 +2435,7 @@ body.cal-day-open { overflow: hidden; }
   background: rgba(239, 68, 68, 0.1) !important;
 }
 
-/* ── Modal de integração ── */
+/* ââ Modal de integraÃ§Ã£o ââ */
 .int-modal-overlay {
   position: fixed;
   inset: 0;
@@ -2508,7 +2508,7 @@ body.cal-day-open { overflow: hidden; }
   border-top: 1px solid var(--border-color);
 }
 
-/* ── Tráfego Pago — métricas ── */
+/* ââ TrÃ¡fego Pago â mÃ©tricas ââ */
 .metrics-row {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -3460,7 +3460,7 @@ body.cal-day-open { overflow: hidden; }
 .ranking-detail { font-size: 11px; color: var(--text-tertiary); }
 .ranking-value { font-size: 14px; font-weight: 700; }
 
-/* Planejamento Diário */
+/* Planejamento DiÃ¡rio */
 .daily-plan-layout {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -3739,7 +3739,7 @@ body.cal-day-open { overflow: hidden; }
   }
 }
 
-/* -- Escrit�rio ----------------------------------------- */
+/* -- Escritório ----------------------------------------- */
 .office-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3901,9 +3901,24 @@ body.cal-day-open { overflow: hidden; }
   line-height: 1.4;
 }
 
+.office-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 80;
+}
 .office-detail-panel {
-  margin-top: 16px;
-  padding: 16px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 81;
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(85vh, 900px);
+  overflow: auto;
+  margin: 0;
+  padding: 20px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
 }
 .office-detail-header {
   display: flex;
@@ -3914,6 +3929,13 @@ body.cal-day-open { overflow: hidden; }
 }
 .office-detail-title { font-weight: 600; font-size: 15px; }
 .office-detail-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+.office-out-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
 .office-section-label {
   font-size: 11px;
   text-transform: uppercase;

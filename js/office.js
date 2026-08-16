@@ -161,13 +161,21 @@ function detailPanelHtml(job) {
   const ctx = job.canva_context || {};
   const designs = Array.isArray(ctx.designs) ? ctx.designs : [];
   const agent = OFFICE_AGENTS.find(a => a.id === job.agent_role);
+  const fullText = [
+    out.headline && `HEADLINE\n${out.headline}`,
+    out.caption && `LEGENDA / COPY\n${out.caption}`,
+    out.script && `ROTEIRO\n${out.script}`,
+    out.cta && `CTA\n${out.cta}`,
+    out.notes && `NOTAS\n${out.notes}`,
+  ].filter(Boolean).join('\n\n');
 
   return `
-    <div class="office-detail-panel card" id="office-detail">
+    <div class="office-detail-backdrop" id="office-detail-backdrop"></div>
+    <div class="office-detail-panel card" id="office-detail" role="dialog" aria-modal="true">
       <div class="office-detail-header">
         <div>
           <div class="office-detail-title">${escapeHtml(job.tasks?.title || 'Job')}</div>
-          <div class="office-detail-meta">${agent?.icon || ''} ${escapeHtml(agent?.label || '')} · ${escapeHtml(job.status)}</div>
+          <div class="office-detail-meta">${agent?.icon || ''} ${escapeHtml(agent?.label || '')} · ${escapeHtml(STATUS_LABEL[job.status] || job.status)}</div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" id="office-detail-close">Fechar</button>
       </div>
@@ -184,14 +192,22 @@ function detailPanelHtml(job) {
             </div>`).join('')}
         </div>` : ''}
 
+      ${['queued', 'studying', 'writing'].includes(job.status) ? `
+        <div class="office-out-block">
+          <strong>Em andamento</strong>
+          <p>${STATUS_LABEL[job.status] || job.status}. Atualiza sozinho — espere um instante.</p>
+        </div>` : ''}
+
       ${job.status === 'done' ? `
         <div class="office-section-label">Entregável</div>
         ${out.headline ? `<div class="office-out-block"><strong>Headline</strong><p>${escapeHtml(out.headline)}</p></div>` : ''}
-        ${out.caption ? `<div class="office-out-block"><strong>Legenda / Copy</strong><p>${escapeHtml(out.caption)}</p></div>` : ''}
-        ${out.script ? `<div class="office-out-block"><strong>Roteiro</strong><pre>${escapeHtml(out.script)}</pre></div>` : ''}
+        ${out.caption ? `<div class="office-out-block"><strong>Legenda / Copy</strong><p class="office-out-text">${escapeHtml(out.caption)}</p></div>` : ''}
+        ${out.script ? `<div class="office-out-block"><strong>Roteiro</strong><pre class="office-out-text">${escapeHtml(out.script)}</pre></div>` : ''}
         ${out.cta ? `<div class="office-out-block"><strong>CTA</strong><p>${escapeHtml(out.cta)}</p></div>` : ''}
         ${out.notes ? `<div class="office-out-block"><strong>Notas QA</strong><p>${escapeHtml(out.notes)}</p></div>` : ''}
+        ${!out.headline && !out.caption && !out.script ? `<div class="office-out-block"><p>Job concluído, mas sem texto estruturado.</p><pre class="office-out-text">${escapeHtml(JSON.stringify(out, null, 2))}</pre></div>` : ''}
         <div class="office-detail-actions">
+          ${fullText ? `<button type="button" class="btn btn-ghost" id="office-copy-output">Copiar texto</button>` : ''}
           <button type="button" class="btn btn-primary" data-apply-job="${job.id}">Aplicar na tarefa</button>
           <button type="button" class="btn btn-ghost" data-rerun-task="${job.task_id || ''}">Rodar de novo</button>
         </div>` : ''}
@@ -274,8 +290,19 @@ export async function renderOffice(profile) {
 
 export function bindOfficeEvents({ profile, refresh }) {
   let jobsCache = [];
+  let openJobId = null;
   let channel = null;
   let pollTimer = null;
+
+  async function fetchJobById(jobId) {
+    const { data, error } = await supabase
+      .from('office_jobs')
+      .select('*, tasks(id, title, client_names, clients(company_name, icon), status, due_date)')
+      .eq('id', jobId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  }
 
   async function refreshJobsUi() {
     try {
@@ -289,17 +316,47 @@ export function bindOfficeEvents({ profile, refresh }) {
           : '<div class="empty-state" style="padding:24px"><div class="empty-state-title">Nenhum job ainda</div></div>';
         bindFeedClicks();
       }
+      if (openJobId) {
+        const still = jobsCache.find(j => j.id === openJobId);
+        if (still) renderDetail(still);
+      }
     } catch (e) {
       console.warn('office refresh', e);
     }
   }
 
-  function openDetail(jobId) {
-    const job = jobsCache.find(j => j.id === jobId);
+  function closeDetail() {
+    openJobId = null;
+    const slot = $('#office-detail-slot');
+    if (slot) slot.innerHTML = '';
+  }
+
+  function renderDetail(job) {
     const slot = $('#office-detail-slot');
     if (!slot || !job) return;
+    openJobId = job.id;
     slot.innerHTML = detailPanelHtml(job);
-    $('#office-detail-close')?.addEventListener('click', () => { slot.innerHTML = ''; });
+
+    const close = () => closeDetail();
+    $('#office-detail-close')?.addEventListener('click', close);
+    $('#office-detail-backdrop')?.addEventListener('click', close);
+
+    $('#office-copy-output')?.addEventListener('click', async () => {
+      const out = job.output || {};
+      const text = [
+        out.headline && `HEADLINE\n${out.headline}`,
+        out.caption && `LEGENDA / COPY\n${out.caption}`,
+        out.script && `ROTEIRO\n${out.script}`,
+        out.cta && `CTA\n${out.cta}`,
+        out.notes && `NOTAS\n${out.notes}`,
+      ].filter(Boolean).join('\n\n');
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('Texto copiado', 'success');
+      } catch {
+        showToast('Não foi possível copiar', 'error');
+      }
+    });
 
     $$('[data-apply-job]', slot).forEach(btn => {
       btn.onclick = async () => {
@@ -331,8 +388,25 @@ export function bindOfficeEvents({ profile, refresh }) {
     });
   }
 
+  async function openDetail(jobId) {
+    try {
+      let job = jobsCache.find(j => j.id === jobId);
+      if (!job) {
+        job = await fetchJobById(jobId);
+        if (job) jobsCache = [job, ...jobsCache.filter(j => j.id !== job.id)];
+      }
+      if (!job) {
+        showToast('Job não encontrado', 'error');
+        return;
+      }
+      renderDetail(job);
+    } catch (err) {
+      handleError(err, 'Não foi possível abrir o job');
+    }
+  }
+
   function bindFeedClicks() {
-    $$('[data-job-id]').forEach(btn => {
+    $$('#office-feed [data-job-id]').forEach(btn => {
       btn.onclick = () => openDetail(btn.dataset.jobId);
     });
   }
@@ -378,8 +452,8 @@ export function bindOfficeEvents({ profile, refresh }) {
   });
 
   bindFeedClicks();
+  refreshJobsUi(); // preenche cache pra o clique abrir o texto na hora
 
-  // Realtime + poll fallback
   try {
     channel = supabase
       .channel('office_jobs_live')
