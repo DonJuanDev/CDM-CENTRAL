@@ -581,9 +581,12 @@ async function bindViewEvents(view) {
           const unmatched = result.unmatched?.length ?? 0;
           let msg;
           if (result.designs != null) {
-            msg = `Canva: ${result.designs} artes · ${result.folders ?? 0} pastas`;
+            msg = `Canva: ${result.designs} artes · ${result.folders ?? 0} marcas/pastas`;
+            if (result.virtual_folders) {
+              msg += ` (${result.virtual_folders} por título)`;
+            }
             if (result.warnings?.length) {
-              msg += ` (avisos: ${result.warnings.length})`;
+              msg += ` — ver avisos no card`;
             }
           } else {
             msg = `Sync concluído: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`;

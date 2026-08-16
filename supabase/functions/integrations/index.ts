@@ -747,6 +747,8 @@ Deno.serve(async (req) => {
                   designs: catalog.designs,
                   unmatched: catalog.unmatched,
                   warnings: catalog.warnings ?? [],
+                  personal_folders: catalog.personal_folders ?? 0,
+                  virtual_folders: catalog.virtual_folders ?? 0,
                   synced_at: new Date().toISOString(),
                 },
               },

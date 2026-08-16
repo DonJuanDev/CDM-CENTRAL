@@ -797,8 +797,8 @@ export const Views = {
       <div id="int-canva-mappings-panel" class="int-mappings-panel card hidden">
         <div class="int-mappings-header">
           <div>
-            <div class="int-guide-title">Vincular pastas Canva → clientes CDM</div>
-            <p class="settings-desc">Pastas com o mesmo nome do cliente são vinculadas automaticamente. Ajuste o restante aqui.</p>
+            <div class="int-guide-title">Vincular marcas Canva → clientes CDM</div>
+            <p class="settings-desc">O Canva só libera pastas pessoais via API. Artes do time (Phytomaster, RSWF…) são agrupadas pelo nome do título. Confira e ajuste os vínculos.</p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="int-canva-mappings-close">Fechar</button>
         </div>
@@ -828,8 +828,8 @@ export const Views = {
         <ol class="int-guide-steps">
           <li>Crie um app em <a href="https://www.canva.com/developers/" target="_blank" rel="noopener">Canva Developers</a> e configure as secrets <code>CANVA_CLIENT_ID</code> / <code>CANVA_CLIENT_SECRET</code> no Supabase</li>
           <li>Redirect URI: <code>…/functions/v1/integrations?action=oauth_callback</code></li>
-          <li>Organize pastas no Canva com o <strong>mesmo nome</strong> dos clientes CDM</li>
-          <li>Clique em <strong>Conectar Canva</strong>, autorize, depois <strong>Sincronizar</strong> e vincule pastas restantes</li>
+          <li>Clique em <strong>Conectar Canva</strong> com a conta do time, depois <strong>Sincronizar</strong></li>
+          <li>Artes do time são ligadas aos clientes pelo <strong>nome no título</strong> (ex.: “Phytomaster 2608”). Em <strong>Vincular pastas</strong> confira os agrupamentos</li>
         </ol>
       </div>
 
