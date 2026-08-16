@@ -2,7 +2,7 @@ import { requireAuth, signOut, canManage } from './auth.js';
 import { $, $$, showToast, handleError, escapeHtml } from './utils.js';
 import { readViewFromLocation, writeViewToLocation, writeViewHash, parseHashQuery, bindRouter } from './router.js';
 import { ROLE_LABELS } from './config.js';
-import { dismissCrudModal, openCrudModal } from './forms.js?v=20260813b';
+import { dismissCrudModal, openCrudModal } from './forms.js?v=20260816e';
 
 const BUILD = '20260816d';
 

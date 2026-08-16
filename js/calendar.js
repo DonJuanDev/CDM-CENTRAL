@@ -7,7 +7,7 @@ import { inferColorOwner, OWNER_COLORS, OWNER_HEX, resolveAssigneeColorKeys, par
 import {
   tasksApi, eventsApi, meetingsApi, invoicesApi, clientsApi
 } from './api/crud.js?v=20260703a';
-import { openCrudModal } from './forms.js?v=20260813b';
+import { openCrudModal } from './forms.js?v=20260816e';
 import { canManage } from './auth.js';
 import { cached, invalidatePrefix } from './cache.js';
 

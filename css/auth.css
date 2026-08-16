@@ -141,8 +141,11 @@
 .crud-form .form-group.full { grid-column: 1 / -1; }
 
 .crud-form textarea.form-input {
-  min-height: 80px;
+  min-height: 200px;
   resize: vertical;
+  line-height: 1.45;
+  field-sizing: content;
+  max-height: 55vh;
 }
 
 .client-checkbox-group {

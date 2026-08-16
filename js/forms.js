@@ -67,7 +67,7 @@ const SCHEMAS = {
     title: 'Conteúdo / Tarefa',
     fields: [
       { name: 'title', label: 'Tarefa', type: 'text', required: true, full: true },
-      { name: 'description', label: 'Descrição / Briefing', type: 'textarea', full: true },
+      { name: 'description', label: 'Descrição / Briefing', type: 'textarea', full: true, rows: 14 },
       { name: 'client_ids', label: 'Clientes', type: 'client_multi_select', full: true },
       { name: 'team_member_names', label: 'Responsáveis', type: 'team_multi_select', full: true },
       { name: 'due_date', label: 'Data de publicação', type: 'date' },
@@ -466,8 +466,10 @@ function renderField(field, value = '', record = null) {
   }
 
   if (field.type === 'textarea') {
+    const rows = field.rows || 6;
+    const extraClass = field.tall ? ' form-textarea-tall' : '';
     return `<div class="form-group ${full}"><label class="form-label">${field.label}</label>
-      <textarea class="form-input" name="${field.name}" ${req}>${val}</textarea></div>`;
+      <textarea class="form-input ${extraClass}" name="${field.name}" rows="${rows}" ${req}>${val}</textarea></div>`;
   }
 
   return `<div class="form-group ${full}"><label class="form-label">${field.label}</label>
