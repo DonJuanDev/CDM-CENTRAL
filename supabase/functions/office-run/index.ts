@@ -216,7 +216,22 @@ async function callClaude(opts: {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Claude API: ${err.slice(0, 300)}`);
+    let friendly = err.slice(0, 300);
+    try {
+      const parsed = JSON.parse(err) as {
+        error?: { message?: string; type?: string };
+      };
+      const msg = parsed?.error?.message || "";
+      if (/credit balance is too low/i.test(msg)) {
+        friendly =
+          "Saldo Anthropic esgotado. Entre em console.anthropic.com → Plans & Billing e compre créditos.";
+      } else if (msg) {
+        friendly = msg;
+      }
+    } catch {
+      /* keep raw slice */
+    }
+    throw new Error(friendly);
   }
 
   const data = await res.json();
