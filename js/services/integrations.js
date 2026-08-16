@@ -50,4 +50,10 @@ export const integrationsService = {
 
   oauthStart: (provider) =>
     callIntegration('oauth_start', { provider }),
+
+  listCanvaFolders: (integrationId) =>
+    callIntegration('list_canva_folders', { integration_id: integrationId }),
+
+  saveCanvaMappings: (integrationId, mappings) =>
+    callIntegration('save_canva_mappings', { integration_id: integrationId, mappings }),
 };

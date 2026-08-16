@@ -76,6 +76,12 @@ export const creativesApi = createApi('creatives', '*, clients(company_name)');
 export const videosApi = createApi('videos', '*, clients(company_name)');
 export const notificationsApi = createApi('notifications');
 export const integrationsApi = createApi('integrations', '*, clients(company_name)');
+export const canvaFoldersApi = createApi('canva_folders');
+export const canvaDesignsApi = createApi('canva_designs');
+export const officeJobsApi = createApi(
+  'office_jobs',
+  '*, tasks(id, title, client_names, clients(company_name, icon), status, due_date)'
+);
 export const profilesApi = createApi('profiles');
 
 export const dailyPlansApi = {

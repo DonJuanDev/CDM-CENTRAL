@@ -1,5 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  buildCanvaAuthUrl,
+  createPkcePair,
+  exchangeCanvaCode,
+  syncCanvaCatalog,
+  type CanvaSettings,
+} from "./canva.ts";
 
 const META_GRAPH = "https://graph.facebook.com/v21.0";
 const APP_URL = "https://cdm-central.vercel.app";
@@ -11,9 +18,13 @@ const corsHeaders = {
 
 type Settings = {
   access_token?: string;
+  refresh_token?: string;
+  expires_at?: number;
+  code_verifier?: string;
   mode?: string;
   ad_account_id?: string;
   ad_account_mappings?: Record<string, string>;
+  folder_mappings?: Record<string, string>;
   last_sync_summary?: Record<string, unknown>;
 };
 
@@ -322,7 +333,7 @@ async function upsertMasterIntegration(
   const mergedSettings = {
     ...((existing?.settings ?? {}) as Settings),
     ...settings,
-    mode: "business_manager",
+    mode: settings.mode || (existing?.settings as Settings)?.mode || "business_manager",
   };
 
   if (existing?.id) {
@@ -389,10 +400,11 @@ Deno.serve(async (req) => {
         return Response.redirect(`${APP_URL}/app.html#/integracoes?oauth_error=bad_state`, 302);
       }
 
+      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
+
       if (state.provider === "meta_ads") {
         const appId = Deno.env.get("META_APP_ID");
         const appSecret = Deno.env.get("META_APP_SECRET");
-        const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
 
         if (appId && appSecret && state.integration_id) {
           const tokenRes = await fetch(
@@ -417,6 +429,60 @@ Deno.serve(async (req) => {
               last_sync: new Date().toISOString(),
             }).eq("id", state.integration_id);
           }
+        }
+      }
+
+      if (state.provider === "canva" && state.integration_id) {
+        const clientId = Deno.env.get("CANVA_CLIENT_ID");
+        const clientSecret = Deno.env.get("CANVA_CLIENT_SECRET");
+
+        if (!clientId || !clientSecret) {
+          return Response.redirect(
+            `${APP_URL}/app.html#/integracoes?oauth_error=canva_secrets_missing`,
+            302
+          );
+        }
+
+        const { data: existing } = await supabase
+          .from("integrations")
+          .select("settings")
+          .eq("id", state.integration_id)
+          .single();
+
+        const prev = (existing?.settings ?? {}) as CanvaSettings;
+        const codeVerifier = prev.code_verifier;
+        if (!codeVerifier) {
+          return Response.redirect(
+            `${APP_URL}/app.html#/integracoes?oauth_error=canva_pkce_missing`,
+            302
+          );
+        }
+
+        try {
+          const tokenData = await exchangeCanvaCode({
+            code,
+            codeVerifier,
+            clientId,
+            clientSecret,
+            redirectUri,
+          });
+
+          await supabase.from("integrations").update({
+            status: "connected",
+            settings: {
+              access_token: tokenData.access_token,
+              refresh_token: tokenData.refresh_token,
+              expires_at: Date.now() + (tokenData.expires_in ?? 14400) * 1000,
+              mode: "canva_team",
+              folder_mappings: prev.folder_mappings ?? {},
+            },
+            last_sync: new Date().toISOString(),
+          }).eq("id", state.integration_id);
+        } catch {
+          return Response.redirect(
+            `${APP_URL}/app.html#/integracoes?oauth_error=canva_token_failed`,
+            302
+          );
         }
       }
 
@@ -650,6 +716,32 @@ Deno.serve(async (req) => {
               status: "success",
               records_synced: single.records,
             });
+          } else if (integration.provider === "canva") {
+            const catalog = await syncCanvaCatalog(supabase, integration);
+            result = { success: true, ...catalog };
+
+            await supabase.from("integrations").update({
+              status: "connected",
+              last_sync: new Date().toISOString(),
+              settings: {
+                ...settings,
+                last_sync_summary: {
+                  folders: catalog.folders,
+                  designs: catalog.designs,
+                  unmatched: catalog.unmatched,
+                  synced_at: new Date().toISOString(),
+                },
+              },
+            }).eq("id", integration_id);
+
+            await supabase.from("integration_sync_logs").insert({
+              integration_id,
+              status: catalog.unmatched.length ? "partial" : "success",
+              records_synced: catalog.designs,
+              error_message: catalog.unmatched.length
+                ? `${catalog.unmatched.length} pasta(s) sem cliente vinculado`
+                : null,
+            });
           } else {
             throw new Error(`Sync não implementado para ${integration.provider}`);
           }
@@ -682,36 +774,181 @@ Deno.serve(async (req) => {
       case "oauth_start": {
         const { provider } = body as { provider?: string };
 
-        if (provider !== "meta_ads") {
-          return json({ error: "OAuth disponível apenas para Meta Ads no momento" }, 400);
+        if (provider !== "meta_ads" && provider !== "canva") {
+          return json({ error: "OAuth disponível para Meta Ads e Canva" }, 400);
         }
 
-        const appId = Deno.env.get("META_APP_ID");
-        if (!appId) {
+        if (provider === "meta_ads") {
+          const appId = Deno.env.get("META_APP_ID");
+          if (!appId) {
+            return json(
+              { error: "META_APP_ID não configurado. Adicione nas secrets da Edge Function no Supabase." },
+              400
+            );
+          }
+
+          const data = await upsertMasterIntegration(supabase, "meta_ads", user.id, {});
+
+          const state = btoa(JSON.stringify({
+            provider,
+            integration_id: data.id,
+            user_id: user.id,
+          }));
+
+          const redirectUri = encodeURIComponent(
+            `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`
+          );
+          const scope = encodeURIComponent("ads_read,business_management,ads_management");
+          const authUrl =
+            `https://www.facebook.com/v21.0/dialog/oauth` +
+            `?client_id=${appId}&redirect_uri=${redirectUri}` +
+            `&scope=${scope}&state=${state}&response_type=code`;
+
+          return json({ auth_url: authUrl });
+        }
+
+        // Canva PKCE
+        const canvaClientId = Deno.env.get("CANVA_CLIENT_ID");
+        const canvaClientSecret = Deno.env.get("CANVA_CLIENT_SECRET");
+        if (!canvaClientId || !canvaClientSecret) {
           return json(
-            { error: "META_APP_ID não configurado. Adicione nas secrets da Edge Function no Supabase." },
+            { error: "CANVA_CLIENT_ID / CANVA_CLIENT_SECRET não configurados nas secrets da Edge Function." },
             400
           );
         }
 
-        const data = await upsertMasterIntegration(supabase, "meta_ads", user.id, {});
+        const { verifier, challenge } = await createPkcePair();
+        const canvaRow = await upsertMasterIntegration(supabase, "canva", user.id, {
+          code_verifier: verifier,
+          mode: "canva_team",
+        });
 
-        const state = btoa(JSON.stringify({
-          provider,
-          integration_id: data.id,
+        // Persist verifier (upsertMaster merges settings)
+        await supabase.from("integrations").update({
+          settings: {
+            ...((canvaRow.settings ?? {}) as Settings),
+            code_verifier: verifier,
+            mode: "canva_team",
+          },
+          status: "disconnected",
+        }).eq("id", canvaRow.id);
+
+        const canvaState = btoa(JSON.stringify({
+          provider: "canva",
+          integration_id: canvaRow.id,
           user_id: user.id,
         }));
 
-        const redirectUri = encodeURIComponent(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`
-        );
-        const scope = encodeURIComponent("ads_read,business_management,ads_management");
-        const authUrl =
-          `https://www.facebook.com/v21.0/dialog/oauth` +
-          `?client_id=${appId}&redirect_uri=${redirectUri}` +
-          `&scope=${scope}&state=${state}&response_type=code`;
+        const canvaRedirect = `${Deno.env.get("SUPABASE_URL")}/functions/v1/integrations?action=oauth_callback`;
+        const authUrl = buildCanvaAuthUrl({
+          clientId: canvaClientId,
+          redirectUri: canvaRedirect,
+          codeChallenge: challenge,
+          state: canvaState,
+        });
 
         return json({ auth_url: authUrl });
+      }
+
+      case "list_canva_folders": {
+        const { integration_id } = body as { integration_id?: string };
+        if (!integration_id) return json({ error: "integration_id é obrigatório" }, 400);
+
+        const { data: integration } = await supabase
+          .from("integrations")
+          .select("*")
+          .eq("id", integration_id)
+          .single();
+
+        if (!integration) return json({ error: "Integração não encontrada" }, 404);
+
+        const settings = (integration.settings ?? {}) as Settings;
+        const manualMappings = settings.folder_mappings ?? {};
+
+        const [{ data: folders }, { data: clients }] = await Promise.all([
+          supabase.from("canva_folders").select("folder_id, name, parent_folder_id, client_id").order("name"),
+          supabase.from("clients").select("id, company_name").eq("status", "ativo"),
+        ]);
+
+        const cdmClients = (clients ?? []) as CdmClient[];
+        const list = (folders ?? []).map((f: {
+          folder_id: string;
+          name: string;
+          parent_folder_id: string | null;
+          client_id: string | null;
+        }) => {
+          const mappedId = manualMappings[f.folder_id] || f.client_id;
+          const matched = mappedId
+            ? cdmClients.find((c) => c.id === mappedId)
+            : null;
+          return {
+            id: f.folder_id,
+            name: f.name,
+            parent_folder_id: f.parent_folder_id,
+            matched_client_id: matched?.id ?? f.client_id ?? null,
+            matched_client_name: matched?.company_name ?? null,
+            manual_mapping: !!manualMappings[f.folder_id],
+          };
+        });
+
+        return json({ folders: list, total: list.length });
+      }
+
+      case "save_canva_mappings": {
+        const { integration_id, mappings } = body as {
+          integration_id?: string;
+          mappings?: Record<string, string>;
+        };
+        if (!integration_id) return json({ error: "integration_id é obrigatório" }, 400);
+
+        const { data: integration } = await supabase
+          .from("integrations")
+          .select("settings")
+          .eq("id", integration_id)
+          .single();
+
+        if (!integration) return json({ error: "Integração não encontrada" }, 404);
+
+        const settings = (integration.settings ?? {}) as Settings;
+        const folderMappings = mappings ?? {};
+
+        const { data, error } = await supabase
+          .from("integrations")
+          .update({
+            settings: {
+              ...settings,
+              folder_mappings: folderMappings,
+            },
+          })
+          .eq("id", integration_id)
+          .select("*")
+          .single();
+
+        if (error) throw error;
+
+        for (const [folderId, clientId] of Object.entries(folderMappings)) {
+          if (!clientId) {
+            await supabase
+              .from("canva_folders")
+              .update({ client_id: null })
+              .eq("folder_id", folderId);
+            await supabase
+              .from("canva_designs")
+              .update({ client_id: null })
+              .eq("folder_id", folderId);
+          } else {
+            await supabase
+              .from("canva_folders")
+              .update({ client_id: clientId })
+              .eq("folder_id", folderId);
+            await supabase
+              .from("canva_designs")
+              .update({ client_id: clientId })
+              .eq("folder_id", folderId);
+          }
+        }
+
+        return json({ success: true, integration: data });
       }
 
       default:
@@ -720,6 +957,7 @@ Deno.serve(async (req) => {
           available_actions: [
             "list", "connect", "sync", "disconnect", "oauth_start", "oauth_callback",
             "list_ad_accounts", "save_mappings",
+            "list_canva_folders", "save_canva_mappings",
           ],
         });
     }

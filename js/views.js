@@ -358,6 +358,11 @@ export const Views = {
     return html;
   },
 
+  async escritorio(profile) {
+    const { renderOffice } = await import('./office.js?v=20260816a');
+    return renderOffice(profile);
+  },
+
   async reunioes(profile) {
     const meetings = await meetingsApi.list({ order: { column: 'scheduled_at' } });
     return `
@@ -651,11 +656,11 @@ export const Views = {
 
     const PROVIDERS = [
       { id: 'meta_ads',          name: 'Meta Ads',          icon: '📘', color: '#1877f2', desc: 'Campanhas, gasto, ROAS e leads do Facebook e Instagram', ready: true },
+      { id: 'canva',             name: 'Canva',             icon: '🎨', color: '#00c4cc', desc: 'Pastas e designs por cliente — memória visual do Escritório', ready: true },
       { id: 'google_analytics',  name: 'Google Analytics',  icon: '📊', color: '#e37400', desc: 'Sessões, usuários, conversões e origem do tráfego',       ready: false },
       { id: 'google_ads',        name: 'Google Ads',        icon: '🔍', color: '#4285f4', desc: 'Campanhas de pesquisa, display e YouTube',                 ready: false },
       { id: 'tiktok_ads',        name: 'TikTok Ads',        icon: '🎵', color: '#010101', desc: 'Campanhas e criativos no TikTok',                          ready: false },
       { id: 'whatsapp_business', name: 'WhatsApp Business', icon: '💬', color: '#25d366', desc: 'Conversas, leads e automações via WhatsApp',               ready: false },
-      { id: 'canva',             name: 'Canva',             icon: '🎨', color: '#00c4cc', desc: 'Templates e designs integrados ao fluxo de produção',      ready: false },
       { id: 'google_calendar',   name: 'Google Calendar',   icon: '📅', color: '#0f9d58', desc: 'Sincronize reuniões e eventos com o calendário CDM',       ready: false },
     ];
 
@@ -675,7 +680,51 @@ export const Views = {
     const metaError = metaMaster?.status === 'error';
     const lastSummary = metaMaster?.settings?.last_sync_summary || null;
 
+    const canvaMaster = (byProvider.canva || []).find(i => !i.client_id)
+      || (byProvider.canva || [])[0];
+    const canvaConnected = !!canvaMaster && canvaMaster.status === 'connected';
+    const canvaSyncing = canvaMaster?.status === 'syncing';
+    const canvaError = canvaMaster?.status === 'error';
+    const canvaSummary = canvaMaster?.settings?.last_sync_summary || null;
+
     const providerCard = (p) => {
+      if (p.id === 'canva') {
+        let statusClass = 'disconnected', statusLabel = 'Desconectado';
+        if (canvaSyncing) { statusClass = 'syncing'; statusLabel = 'Sincronizando pastas…'; }
+        else if (canvaError) { statusClass = 'error'; statusLabel = 'Erro na sincronização'; }
+        else if (canvaConnected) { statusClass = 'connected'; statusLabel = 'Conta Canva conectada'; }
+
+        const lastSync = fmtSync(canvaMaster?.last_sync);
+        const syncInfo = canvaSummary
+          ? `${canvaSummary.designs ?? 0} artes · ${canvaSummary.folders ?? 0} pastas`
+          : '';
+
+        return `<div class="int-card ${statusClass}" data-provider="canva">
+          <div class="int-card-header">
+            <div class="int-card-icon" style="background:${p.color}18;border-color:${p.color}30"><span>${p.icon}</span></div>
+            <div class="int-card-info">
+              <div class="int-card-name">${p.name}</div>
+              <div class="int-card-desc">${p.desc}</div>
+            </div>
+          </div>
+          <div class="int-card-status">
+            <span class="int-status-dot ${statusClass}"></span>
+            <span class="int-status-label">${statusLabel}</span>
+            ${lastSync ? `<span class="int-status-sync">· ${lastSync}</span>` : ''}
+            ${syncInfo ? `<span class="int-status-client">· ${syncInfo}</span>` : ''}
+          </div>
+          <div class="int-card-actions">
+            ${canvaConnected
+              ? `<button class="btn btn-primary btn-sm" data-int-sync="${canvaMaster.id}"${canvaSyncing ? ' disabled' : ''}>↻ Sincronizar</button>
+                 <button class="btn btn-ghost btn-sm" data-int-canva-mappings="${canvaMaster.id}">Vincular pastas</button>
+                 <button class="btn btn-ghost btn-sm" data-int-oauth data-provider="canva">Reconectar</button>
+                 <button class="btn btn-ghost btn-sm btn-danger-ghost" data-int-disconnect="${canvaMaster.id}">Desconectar</button>`
+              : `<button class="btn btn-primary btn-sm" data-int-oauth data-provider="canva">Conectar Canva</button>`
+            }
+          </div>
+        </div>`;
+      }
+
       if (p.id !== 'meta_ads') {
         const list = byProvider[p.id] || [];
         const conn = list.find(i => i.status === 'connected');
@@ -744,6 +793,22 @@ export const Views = {
         </div>
       </div>` : '';
 
+    const canvaMappingsPanelHtml = canvaMaster ? `
+      <div id="int-canva-mappings-panel" class="int-mappings-panel card hidden">
+        <div class="int-mappings-header">
+          <div>
+            <div class="int-guide-title">Vincular pastas Canva → clientes CDM</div>
+            <p class="settings-desc">Pastas com o mesmo nome do cliente são vinculadas automaticamente. Ajuste o restante aqui.</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="int-canva-mappings-close">Fechar</button>
+        </div>
+        <div id="int-canva-mappings-loading" class="loading" style="padding:24px"><div class="spinner"></div></div>
+        <div id="int-canva-mappings-body" class="hidden"></div>
+        <div class="int-mappings-footer hidden" id="int-canva-mappings-footer">
+          <button type="button" class="btn btn-primary" id="int-canva-mappings-save">Salvar vínculos</button>
+        </div>
+      </div>` : '';
+
     return `
       ${pageHeader('Integrações', 'Conecte suas plataformas ao CDM Central')}
 
@@ -758,11 +823,22 @@ export const Views = {
         </ol>
       </div>
 
+      <div class="int-setup-guide card" style="margin-top:16px">
+        <div class="int-guide-title">🎨 Como conectar o Canva</div>
+        <ol class="int-guide-steps">
+          <li>Crie um app em <a href="https://www.canva.com/developers/" target="_blank" rel="noopener">Canva Developers</a> e configure as secrets <code>CANVA_CLIENT_ID</code> / <code>CANVA_CLIENT_SECRET</code> no Supabase</li>
+          <li>Redirect URI: <code>…/functions/v1/integrations?action=oauth_callback</code></li>
+          <li>Organize pastas no Canva com o <strong>mesmo nome</strong> dos clientes CDM</li>
+          <li>Clique em <strong>Conectar Canva</strong>, autorize, depois <strong>Sincronizar</strong> e vincule pastas restantes</li>
+        </ol>
+      </div>
+
       <div class="int-grid">
         ${PROVIDERS.map(p => providerCard(p)).join('')}
       </div>
 
       ${mappingsPanelHtml}
+      ${canvaMappingsPanelHtml}
 
       <div id="int-modal" class="int-modal-overlay hidden" role="dialog" aria-modal="true">
         <div class="int-modal-panel card">
@@ -819,6 +895,7 @@ export const NAV_ITEMS = [
   { id: 'financeiro', icon: navIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'), label: 'Financeiro', roles: ['admin','gestor'] },
   { id: 'boletos', icon: navIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'), label: 'Boletos', roles: ['admin','gestor','cliente'] },
   { id: 'calendario', icon: navIcon('<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'), label: 'Calendário de Conteúdos', roles: ['admin','gestor','colaborador','cliente'] },
+  { id: 'escritorio', icon: navIcon('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>'), label: 'Escritório', roles: ['admin','gestor','colaborador'] },
   { id: 'trafego', icon: navIcon('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>'), label: 'Tráfego Pago', roles: ['admin','gestor','colaborador'] },
   { id: 'arquivos', icon: navIcon('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'), label: 'Arquivos', roles: ['admin','gestor','colaborador','cliente'] },
   { id: 'notas-pessoais', icon: navIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'), label: 'Notas Pessoais', roles: ['admin','gestor','colaborador'] },

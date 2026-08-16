@@ -4,7 +4,7 @@ import { readViewFromLocation, writeViewToLocation, writeViewHash, parseHashQuer
 import { ROLE_LABELS } from './config.js';
 import { dismissCrudModal, openCrudModal } from './forms.js?v=20260813b';
 
-const BUILD = '20260813b';
+const BUILD = '20260816a';
 
 const App = {
   profile: null,
@@ -94,6 +94,11 @@ export async function navigate(view, opts = {}) {
   if (!skipHistory) writeViewToLocation(view, { replace });
   else if (replace && !window.location.hash.includes('?')) writeViewToLocation(view, { replace: true });
 
+  if (view !== 'escritorio' && App._officeCleanup) {
+    try { App._officeCleanup(); } catch {}
+    App._officeCleanup = null;
+  }
+
   renderSidebar();
 
   const main = $('#main-content');
@@ -156,6 +161,18 @@ async function bindViewEvents(view) {
   if (view === 'calendario') {
     const { bindCalendarEvents, refreshCalendarView } = await import(`./calendar.js?v=${BUILD}`);
     bindCalendarEvents((opts) => refreshCalendarView(App.profile, opts));
+  }
+
+  if (view === 'escritorio') {
+    if (App._officeCleanup) {
+      try { App._officeCleanup(); } catch {}
+      App._officeCleanup = null;
+    }
+    const { bindOfficeEvents } = await import(`./office.js?v=${BUILD}`);
+    App._officeCleanup = bindOfficeEvents({
+      profile: App.profile,
+      refresh: () => navigate('escritorio', { force: true, skipHistory: true }),
+    });
   }
 
   if (view === 'clientes') {
@@ -273,8 +290,11 @@ async function bindViewEvents(view) {
     const hash = window.location.hash;
     if (hash.includes('oauth_connected=') || hash.includes('oauth_error=')) {
       const params = new URLSearchParams(hash.split('?')[1] || '');
-      if (params.get('oauth_connected')) {
-        showToast('Meta Ads conectado com sucesso!', 'success');
+      const connected = params.get('oauth_connected');
+      if (connected === 'canva') {
+        showToast('Canva conectado com sucesso!', 'success');
+      } else if (connected) {
+        showToast(`${connected === 'meta_ads' ? 'Meta Ads' : connected} conectado com sucesso!`, 'success');
       } else if (params.get('oauth_error')) {
         showToast(`Erro OAuth: ${params.get('oauth_error')}`, 'error');
       }
@@ -383,6 +403,113 @@ async function bindViewEvents(view) {
       btn.addEventListener('click', () => loadMappingsPanel(btn.dataset.intMappings));
     });
 
+    async function loadCanvaMappingsPanel(integrationId) {
+      const panel = $('#int-canva-mappings-panel');
+      const loading = $('#int-canva-mappings-loading');
+      const body = $('#int-canva-mappings-body');
+      const footer = $('#int-canva-mappings-footer');
+      if (!panel) return;
+
+      panel.classList.remove('hidden');
+      loading?.classList.remove('hidden');
+      body?.classList.add('hidden');
+      footer?.classList.add('hidden');
+
+      try {
+        const [{ integrationsService }, { clientsApi }] = await Promise.all([
+          import('./services/integrations.js?v=20260816a'),
+          import('./api/crud.js?v=20260703a'),
+        ]);
+        const [{ folders }, clients] = await Promise.all([
+          integrationsService.listCanvaFolders(integrationId),
+          clientsApi.list({ order: { column: 'company_name', asc: true } }),
+        ]);
+
+        const clientOptions = clients.map(c =>
+          `<option value="${c.id}">${escapeHtml(c.company_name)}</option>`
+        ).join('');
+
+        body.innerHTML = `
+          <div class="int-mappings-table-wrap">
+            <table class="notion-table">
+              <thead><tr><th>Pasta Canva</th><th>ID</th><th>Cliente CDM</th></tr></thead>
+              <tbody>
+                ${(folders || []).map(f => {
+                  const selected = f.matched_client_id || '';
+                  const autoBadge = f.matched_client_id && !f.manual_mapping
+                    ? '<span class="int-map-auto">auto</span>' : '';
+                  return `<tr>
+                    <td>${escapeHtml(f.name)} ${autoBadge}</td>
+                    <td style="font-family:monospace;font-size:11px;color:var(--text-tertiary)">${escapeHtml(f.id)}</td>
+                    <td>
+                      <select class="form-input int-map-select" data-folder-id="${escapeHtml(f.id)}">
+                        <option value="">— Sem vínculo —</option>
+                        ${clientOptions}
+                      </select>
+                    </td>
+                  </tr>`;
+                }).join('') || '<tr><td colspan="3">Nenhuma pasta sincronizada. Clique em Sincronizar primeiro.</td></tr>'}
+              </tbody>
+            </table>
+          </div>`;
+
+        (folders || []).forEach(f => {
+          const sel = body.querySelector(`[data-folder-id="${CSS.escape(f.id)}"]`);
+          if (sel && f.matched_client_id) sel.value = f.matched_client_id;
+        });
+
+        loading?.classList.add('hidden');
+        body?.classList.remove('hidden');
+        footer?.classList.remove('hidden');
+
+        $('#int-canva-mappings-save').onclick = async () => {
+          const mappings = {};
+          body.querySelectorAll('.int-map-select').forEach(sel => {
+            if (sel.value) mappings[sel.dataset.folderId] = sel.value;
+          });
+          try {
+            await integrationsService.saveCanvaMappings(integrationId, mappings);
+            showToast('Vínculos Canva salvos!', 'success');
+            refresh();
+          } catch (err) {
+            showToast(err.message || 'Erro ao salvar', 'error');
+          }
+        };
+      } catch (err) {
+        loading.innerHTML = `<p style="color:var(--danger);padding:16px">${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    $('#int-canva-mappings-close')?.addEventListener('click', () => {
+      $('#int-canva-mappings-panel')?.classList.add('hidden');
+    });
+
+    $$('[data-int-canva-mappings]').forEach(btn => {
+      btn.addEventListener('click', () => loadCanvaMappingsPanel(btn.dataset.intCanvaMappings));
+    });
+
+    $$('[data-int-oauth]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const provider = btn.dataset.provider;
+        const orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Abrindo Canva…';
+        try {
+          const { integrationsService } = await import('./services/integrations.js?v=20260816a');
+          const result = await integrationsService.oauthStart(provider);
+          if (result.auth_url) {
+            window.location.href = result.auth_url;
+            return;
+          }
+          throw new Error('URL de autorização não retornada');
+        } catch (err) {
+          showToast(err.message || 'Erro ao iniciar OAuth', 'error');
+          btn.disabled = false;
+          btn.textContent = orig;
+        }
+      });
+    });
+
     $$('[data-int-connect]').forEach(btn => {
       btn.addEventListener('click', () => {
         const isEdit = btn.dataset.editMode === '1';
@@ -447,12 +574,17 @@ async function bindViewEvents(view) {
         const integrationId = btn.dataset.intSync;
         const origText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = '↻ Sincronizando todas…';
+        btn.textContent = '↻ Sincronizando…';
         try {
-          const { integrationsService } = await import('./services/integrations.js?v=20260626c');
+          const { integrationsService } = await import('./services/integrations.js?v=20260816a');
           const result = await integrationsService.sync(integrationId);
           const unmatched = result.unmatched?.length ?? 0;
-          let msg = `Sync concluído: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`;
+          let msg;
+          if (result.designs != null) {
+            msg = `Canva: ${result.designs} artes · ${result.folders ?? 0} pastas`;
+          } else {
+            msg = `Sync concluído: ${result.accounts_synced}/${result.accounts_total} contas · ${result.records} campanhas`;
+          }
           if (unmatched) msg += ` · ${unmatched} sem vínculo`;
           showToast(msg, unmatched ? 'warning' : 'success');
           refresh();
