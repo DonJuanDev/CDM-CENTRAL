@@ -303,7 +303,7 @@ async function listFolderItems(
   return items;
 }
 
-/** Sync Canva Projects root → folders + designs; auto-map clients by folder name */
+/** Sync Canva Projects (root) → nested folders + designs; auto-map clients by folder name */
 export async function syncCanvaCatalog(
   supabase: Supabase,
   integration: { id: string; settings?: CanvaSettings | null }
@@ -322,58 +322,55 @@ export async function syncCanvaCatalog(
     .eq("status", "ativo");
   const cdmClients = (clients ?? []) as CdmClient[];
 
-  // Root "Projects" folder id is typically available via /folders; Canva uses
-  // special root. We list designs with ownership filter AND walk folder tree
-  // starting from folder items that we discover via search-folders or root.
-  // Canva Connect: GET /v1/folders — not always present; use list designs +
-  // recursive walk from known roots. Docs: list folder items needs folderId.
-  // The root projects folder is often obtained via GET /v1/folders?include=shared
-  // Fallback: list all designs via /v1/designs and skip folder tree if needed.
-
   let foldersSynced = 0;
   let designsSynced = 0;
-  const unmatched: Array<{ id: string; name: string }> = [];
   const visitedFolders = new Set<string>();
+  const folderClientMap = new Map<string, string | null>(); // folder_id → client_id
 
-  async function walkFolder(folderId: string, parentId: string | null, folderName: string) {
+  async function walkFolder(
+    folderId: string,
+    parentId: string | null,
+    folderName: string,
+    inheritedClientId: string | null
+  ) {
     if (visitedFolders.has(folderId)) return;
     visitedFolders.add(folderId);
 
     const matched = matchClientByName(folderName, cdmClients, manualMappings, folderId);
-    if (!matched && folderName && folderId !== "root") {
-      // only track top-level-ish unmatched (skip if already in unmatched)
-      if (!unmatched.some((u) => u.id === folderId)) {
-        unmatched.push({ id: folderId, name: folderName });
-      }
+    const clientId = matched?.id ?? inheritedClientId ?? null;
+    folderClientMap.set(folderId, clientId);
+
+    // Não cadastrar "root"/"Projects" como pasta de cliente — só as debaixo
+    const skipRow = folderId === "root" || folderId === "uploads";
+    if (!skipRow) {
+      await supabase.from("canva_folders").upsert(
+        {
+          folder_id: folderId,
+          name: folderName || folderId,
+          parent_folder_id: parentId === "root" || parentId === "uploads" ? null : parentId,
+          client_id: clientId,
+        },
+        { onConflict: "folder_id" }
+      );
+      foldersSynced++;
     }
-
-    await supabase.from("canva_folders").upsert(
-      {
-        folder_id: folderId,
-        name: folderName || folderId,
-        parent_folder_id: parentId,
-        client_id: matched?.id ?? null,
-      },
-      { onConflict: "folder_id" }
-    );
-    foldersSynced++;
-
-    // If parent mapped but this folder isn't, inherit client from matching name only
-    const clientId = matched?.id ?? null;
 
     let items: FolderItem[] = [];
     try {
       items = await listFolderItems(token, folderId);
-    } catch {
+    } catch (e) {
+      console.error(`Canva walk failed for ${folderId}:`, (e as Error).message);
       return;
     }
 
     for (const item of items) {
       if (item.type === "folder" && item.folder) {
-        await walkFolder(item.folder.id, folderId, item.folder.name);
-      } else if (item.type === "design" && item.design) {
+        await walkFolder(item.folder.id, folderId, item.folder.name, clientId);
+      } else if (
+        (item.type === "design" || item.type === "image") &&
+        item.design
+      ) {
         const d = item.design;
-        // Prefer folder's client; else try match by design title
         const designClient =
           clientId ??
           matchClientByName(d.title || "", cdmClients, {}, d.id)?.id ??
@@ -382,7 +379,7 @@ export async function syncCanvaCatalog(
         await supabase.from("canva_designs").upsert(
           {
             design_id: d.id,
-            folder_id: folderId,
+            folder_id: skipRow ? null : folderId,
             client_id: designClient,
             title: d.title || "Sem título",
             thumbnail_url: d.thumbnail?.url ?? null,
@@ -398,9 +395,27 @@ export async function syncCanvaCatalog(
     }
   }
 
-  // Discover root folders: Canva has a special "root" — try listing via designs
-  // and also try common root folder endpoints.
-  // Approach 1: list designs and capture metadata
+  // 1) Projetos do Canva = pasta especial "root" (desce a árvore toda)
+  await walkFolder("root", null, "Projetos", null);
+
+  // 2) Uploads também (às vezes tem material solto)
+  try {
+    await walkFolder("uploads", null, "Uploads", null);
+  } catch {
+    // ignore
+  }
+
+  // 3) Lista geral de designs: só preenche o que ainda não tem pasta/cliente
+  const { data: alreadySynced } = await supabase
+    .from("canva_designs")
+    .select("design_id, folder_id, client_id");
+  const existingMap = new Map(
+    (alreadySynced ?? []).map((r: { design_id: string; folder_id: string | null; client_id: string | null }) => [
+      r.design_id,
+      r,
+    ])
+  );
+
   let continuation = "";
   do {
     const query: Record<string, string> = {
@@ -420,12 +435,15 @@ export async function syncCanvaCatalog(
     }>) ?? [];
 
     for (const d of items) {
+      const existing = existingMap.get(d.id);
+      if (existing?.folder_id || existing?.client_id) continue;
+
       const matched = matchClientByName(d.title || "", cdmClients, {}, d.id);
       await supabase.from("canva_designs").upsert(
         {
           design_id: d.id,
-          folder_id: null,
-          client_id: matched?.id ?? null,
+          folder_id: existing?.folder_id ?? null,
+          client_id: matched?.id ?? existing?.client_id ?? null,
           title: d.title || "Sem título",
           thumbnail_url: d.thumbnail?.url ?? null,
           page_count: d.page_count ?? 1,
@@ -435,21 +453,13 @@ export async function syncCanvaCatalog(
         },
         { onConflict: "design_id" }
       );
-      designsSynced++;
+      if (!existing) designsSynced++;
     }
 
     continuation = (data.continuation as string) || "";
   } while (continuation);
 
-  // Folder walk is optional — designs list already filled the catalog.
-  // Try walking Canva root if the API allows it.
-  try {
-    await walkFolder("root", null, "Projects");
-  } catch {
-    // ignore
-  }
-
-  // Apply manual folder mappings to designs in those folders
+  // Aplicar mapeamentos manuais (e propagar para designs da pasta)
   for (const [folderId, clientId] of Object.entries(manualMappings)) {
     if (!clientId) continue;
     await supabase
@@ -462,7 +472,6 @@ export async function syncCanvaCatalog(
       .eq("folder_id", folderId);
   }
 
-  // Filter unmatched to folders that still have no client
   const { data: unmappedFolders } = await supabase
     .from("canva_folders")
     .select("folder_id, name")
