@@ -363,9 +363,6 @@ async function upsertInChunks<T extends Record<string, unknown>>(
   }
 }
 
-/** Cap de segurança — ~5 páginas da API. */
-const MAX_DESIGNS_SYNC = 500;
-
 /**
  * A API do Canva só lista pastas do root pessoal do usuário OAuth.
  * Pastas de clientes do time (Phytomaster, RSWF…) costumam ser de outro membro —
@@ -373,7 +370,7 @@ const MAX_DESIGNS_SYNC = 500;
  *
  * Estratégia:
  * 1) Pastas reais do root (se houver)
- * 2) Todas as artes acessíveis → casar título com cliente CDM
+ * 2) TODAS as artes acessíveis (paginação completa) + busca por nome de cada cliente
  * 3) Criar pastas virtuais virt:{clientId} para o painel de vínculos / Escritório
  */
 export async function syncCanvaCatalog(
@@ -393,9 +390,9 @@ export async function syncCanvaCatalog(
   const warnings: string[] = [];
 
   const { data: clients } = await supabase
-    .from('clients')
-    .select('id, company_name')
-    .eq('status', 'ativo');
+    .from("clients")
+    .select("id, company_name")
+    .eq("status", "ativo");
   const cdmClients = (clients ?? []) as CdmClient[];
 
   const folderRows: FolderRow[] = [];
@@ -408,7 +405,7 @@ export async function syncCanvaCatalog(
     inheritedClientId: string | null;
   };
   const queue: QueueNode[] = [
-    { id: 'root', parentId: null, name: 'Projetos', inheritedClientId: null },
+    { id: "root", parentId: null, name: "Projetos", inheritedClientId: null },
   ];
 
   while (queue.length) {
@@ -424,12 +421,12 @@ export async function syncCanvaCatalog(
     );
     const clientId = matched?.id ?? node.inheritedClientId ?? null;
 
-    if (node.id !== 'root' && node.id !== 'uploads') {
+    if (node.id !== "root" && node.id !== "uploads") {
       folderRows.push({
         folder_id: node.id,
         name: node.name || node.id,
         parent_folder_id:
-          node.parentId === 'root' || node.parentId === 'uploads'
+          node.parentId === "root" || node.parentId === "uploads"
             ? null
             : node.parentId,
         client_id: clientId,
@@ -438,11 +435,11 @@ export async function syncCanvaCatalog(
 
     try {
       const items = await listFolderItems(token, node.id, {
-        itemTypes: 'folder',
-        sortBy: 'title_ascending',
+        itemTypes: "folder",
+        sortBy: "title_ascending",
       });
       for (const item of items) {
-        if (item.type === 'folder' && item.folder?.id) {
+        if (item.type === "folder" && item.folder?.id) {
           queue.push({
             id: item.folder.id,
             parentId: node.id,
@@ -452,83 +449,123 @@ export async function syncCanvaCatalog(
         }
       }
     } catch (e) {
-      warnings.push("Pastas pessoais (" + node.name + "): " + (e as Error).message);
+      warnings.push(
+        "Pastas pessoais (" + node.name + "): " + (e as Error).message
+      );
     }
   }
 
   const personalFolderCount = folderRows.length;
   if (personalFolderCount <= 2) {
     warnings.push(
-      'A API do Canva só enxerga pastas pessoais do usuário conectado. Pastas do time (Phytomaster, RSWF…) são mapeadas pelo nome das artes.'
+      "A API do Canva só enxerga pastas pessoais do usuário conectado. Pastas do time são mapeadas pelo nome das artes."
     );
   }
+
+  type CanvaDesignItem = {
+    id: string;
+    title?: string;
+    page_count?: number;
+    updated_at?: number;
+    thumbnail?: { url?: string };
+  };
 
   const designRows: DesignRow[] = [];
   const designIdsSeen = new Set<string>();
   const clientDesignCounts = new Map<string, number>();
 
-  try {
-    let continuation = '';
+  function ingestDesign(d: CanvaDesignItem, forcedClientId?: string | null) {
+    if (designIdsSeen.has(d.id)) return;
+    designIdsSeen.add(d.id);
+
+    const matched =
+      (forcedClientId
+        ? cdmClients.find((c) => c.id === forcedClientId)
+        : null) ??
+      matchClientByName(d.title || "", cdmClients, manualMappings, d.id);
+    const clientId = matched?.id ?? forcedClientId ?? null;
+    const folderId = clientId ? "virt:" + clientId : null;
+
+    if (clientId) {
+      clientDesignCounts.set(
+        clientId,
+        (clientDesignCounts.get(clientId) ?? 0) + 1
+      );
+    }
+
+    designRows.push({
+      design_id: d.id,
+      folder_id: folderId,
+      client_id: clientId,
+      title: d.title || "Sem título",
+      thumbnail_url: d.thumbnail?.url ?? null,
+      page_count: d.page_count ?? 1,
+      updated_at_canva: d.updated_at
+        ? new Date(d.updated_at * 1000).toISOString()
+        : null,
+    });
+  }
+
+  async function fetchAllDesigns(extraQuery: Record<string, string> = {}) {
+    let continuation = "";
     do {
       const query: Record<string, string> = {
-        limit: '100',
-        ownership: 'any',
-        sort_by: 'modified_descending',
+        limit: "100",
+        ownership: "any",
+        sort_by: "modified_descending",
+        ...extraQuery,
       };
       if (continuation) query.continuation = continuation;
 
-      const data = await canvaFetch('/designs', token, query);
-      const items = (data.items as Array<{
-        id: string;
-        title?: string;
-        page_count?: number;
-        updated_at?: number;
-        thumbnail?: { url?: string };
-      }>) ?? [];
-
+      const data = await canvaFetch("/designs", token, query);
+      const items = (data.items as CanvaDesignItem[]) ?? [];
       for (const d of items) {
-        if (designIdsSeen.has(d.id)) continue;
-        designIdsSeen.add(d.id);
-
-        const matched = matchClientByName(
-          d.title || '',
-          cdmClients,
-          manualMappings,
-          d.id
+        ingestDesign(
+          d,
+          extraQuery.query
+            ? matchClientByName(
+                extraQuery.query,
+                cdmClients,
+                {},
+                "search:" + extraQuery.query
+              )?.id ?? null
+            : null
         );
-        const clientId = matched?.id ?? null;
-        const folderId = clientId ? ("virt:" + clientId) : null;
+      }
+      continuation = (data.continuation as string) || "";
+    } while (continuation);
+  }
 
-        if (clientId) {
-          clientDesignCounts.set(
-            clientId,
-            (clientDesignCounts.get(clientId) ?? 0) + 1
+  try {
+    // 1) Catálogo completo liberado para esta conta
+    await fetchAllDesigns();
+
+    // 2) Busca por nome de cada cliente (pega artes que o list geral às vezes omitiria)
+    for (const client of cdmClients) {
+      const terms = [
+        client.company_name,
+        ...client.company_name.split(/\s+/).filter((t) => t.length >= 4),
+      ];
+      const uniqueTerms = [...new Set(terms.map((t) => t.trim()).filter(Boolean))];
+      for (const term of uniqueTerms.slice(0, 2)) {
+        try {
+          await fetchAllDesigns({ query: term });
+        } catch (e) {
+          warnings.push(
+            "Busca \"" + term + "\": " + (e as Error).message
           );
         }
-
-        designRows.push({
-          design_id: d.id,
-          folder_id: folderId,
-          client_id: clientId,
-          title: d.title || 'Sem título',
-          thumbnail_url: d.thumbnail?.url ?? null,
-          page_count: d.page_count ?? 1,
-          updated_at_canva: d.updated_at
-            ? new Date(d.updated_at * 1000).toISOString()
-            : null,
-        });
-
-        if (designRows.length >= MAX_DESIGNS_SYNC) break;
       }
-
-      continuation =
-        designRows.length >= MAX_DESIGNS_SYNC
-          ? ''
-          : ((data.continuation as string) || '');
-    } while (continuation);
+    }
   } catch (e) {
     warnings.push("Lista de artes: " + (e as Error).message);
   }
+
+  warnings.push(
+    "Total liberado pela API do Canva para esta conta: " +
+      designRows.length +
+      " artes. Itens que você vê nas pastas do time mas não entram aqui não estão compartilhados com o usuário conectado — reconecte com a conta dona das pastas ou compartilhe as artes com ela."
+  );
 
   const virtualFolders: FolderRow[] = [];
   for (const client of cdmClients) {
@@ -546,24 +583,24 @@ export async function syncCanvaCatalog(
   const allFolders = [...folderRows, ...virtualFolders];
 
   await supabase
-    .from('canva_folders')
+    .from("canva_folders")
     .delete()
-    .in('folder_id', ['root', 'uploads', 'Projects']);
+    .in("folder_id", ["root", "uploads", "Projects"]);
 
   if (allFolders.length) {
-    await upsertInChunks(supabase, 'canva_folders', allFolders, 'folder_id');
+    await upsertInChunks(supabase, "canva_folders", allFolders, "folder_id");
   }
 
   if (designRows.length) {
-    await upsertInChunks(supabase, 'canva_designs', designRows, 'design_id');
+    await upsertInChunks(supabase, "canva_designs", designRows, "design_id");
   }
 
   for (const [folderId, clientId] of Object.entries(manualMappings)) {
     if (!clientId) continue;
     await supabase
-      .from('canva_folders')
+      .from("canva_folders")
       .update({ client_id: clientId })
-      .eq('folder_id', folderId);
+      .eq("folder_id", folderId);
 
     if (folderId.startsWith("virt:")) {
       await supabase
@@ -572,16 +609,16 @@ export async function syncCanvaCatalog(
         .eq("folder_id", folderId);
     } else {
       await supabase
-        .from('canva_designs')
+        .from("canva_designs")
         .update({ client_id: clientId })
-        .eq('folder_id', folderId);
+        .eq("folder_id", folderId);
     }
   }
 
   const { data: unmappedFolders } = await supabase
-    .from('canva_folders')
-    .select('folder_id, name')
-    .is('client_id', null);
+    .from("canva_folders")
+    .select("folder_id, name")
+    .is("client_id", null);
 
   const finalUnmatched = (unmappedFolders ?? []).map(
     (f: { folder_id: string; name: string }) => ({
